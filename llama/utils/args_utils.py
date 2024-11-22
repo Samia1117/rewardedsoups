@@ -14,8 +14,9 @@ LOAD_IN_8BIT = True
 class DefaultArgs:
     seed = 0
     output_max_length = 32
-    base_model_name = "decapoda-research/llama-7b-hf"
-    peft_name = "tloen/alpaca-lora-7b"
+    # base_model_name = "decapoda-research/llama-7b-hf"   # Does not exist anymore
+    base_model_name = "baffo32/decapoda-research-llama-7B-hf"
+    peft_name = "tloen/alpaca-lora-7b"  # need to change, if changing base model
 
     reward_models_summary = [
         "Tristan/gpt2_reward_summarization",

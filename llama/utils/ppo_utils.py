@@ -51,6 +51,8 @@ class Loader:
                 task_type="CAUSAL_LM",
             )
             model = get_peft_model(base_model, lora_config)
+            print(f'#### Printing trainable parameters ...')
+            model.print_trainable_parameters()
         else:
             model = PeftModel.from_pretrained(
                 base_model, peft_name, local_files_only=args_utils.LOCAL_FILES_ONLY)
