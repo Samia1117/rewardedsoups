@@ -9,7 +9,8 @@ from tqdm import tqdm
 from transformers import LlamaForCausalLM
 from trl import AutoModelForCausalLMWithValueHead
 from trl.core import LengthSampler
-from peft import PeftModel, LoraConfig, get_peft_model, prepare_model_for_int8_training
+# from peft import PeftModel, LoraConfig, get_peft_model, prepare_model_for_int8_training
+from peft import PeftModel, LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 from utils import llama_utils, args_utils
 
@@ -29,7 +30,8 @@ class Loader:
     @staticmethod
     def load_base_model(base_model_name):
         base_model = LlamaForCausalLM.from_pretrained(base_model_name, load_in_8bit=args_utils.LOAD_IN_8BIT, device_map="auto")
-        base_model = prepare_model_for_int8_training(base_model)
+        # base_model = prepare_model_for_int8_training(base_model)
+        base_model = prepare_model_for_kbit_training(base_model)
         return base_model
 
     @staticmethod
@@ -38,6 +40,7 @@ class Loader:
         Here comes the magic with `peft`! Let's load a `PeftModel` and specify that we are going to use low-rank adapters (LoRA) using `get_peft_model` utility function from `peft`.
         """
         if peft_name.startswith("lora"):
+            print(f'#### Using Peft model = {peft_name} with CUSTOM config')
             if "-" in peft_name:
                 r = int(peft_name.split("-")[-1])
             else:
@@ -51,16 +54,20 @@ class Loader:
                 task_type="CAUSAL_LM",
             )
             model = get_peft_model(base_model, lora_config)
-            print(f'#### Printing trainable parameters ...')
-            model.print_trainable_parameters()
         else:
-            model = PeftModel.from_pretrained(
-                base_model, peft_name, local_files_only=args_utils.LOCAL_FILES_ONLY)
+            print(f'#### Using Peft model = {peft_name} with DEFAULT config')
+            # model = PeftModel.from_pretrained(
+            #     base_model, peft_name, local_files_only=args_utils.LOCAL_FILES_ONLY)
+            model = PeftModel.from_pretrained(base_model, peft_name)
+
+        print(f'#### Printing trainable parameters ...')
+        model.print_trainable_parameters()
         modelvaluehead = AutoModelForCausalLMWithValueHead.from_pretrained(model)
         return modelvaluehead
 
     def load_optimizer(optimizer, peft_name, device):
         if not (peft_name.startswith("/") and os.path.exists(peft_name)):
+            print("#### peft_name does not start with /. Not loading optimizer...")
             return
         optimizer_path = os.path.join(peft_name, "optimizer.pth")
         if not os.path.exists(optimizer_path):

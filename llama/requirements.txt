@@ -1,4 +1,5 @@
-accelerate==0.17.0. #  <----------- Message: "This model has some weights that should be kept in higher precision, you need to upgrade `accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
+# Install all commented out packages using pip install package-name/git repo as specified. Use numpy_version==1.24.4 where applicable. 
+# accelerate==0.17.0. #  <----------- Message: "This model has some weights that should be kept in higher precision, you need to upgrade `accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
 aiofiles==23.1.0
 aiohttp==3.8.4
 aiosignal==1.3.1
@@ -16,7 +17,7 @@ bitsandbytes-cuda116==0.26.0.post2
 certifi==2022.12.7
 charset-normalizer==3.1.0
 click==8.1.3
-openai-clip
+# openai-clip
 #clip==1.0      # <-----------  DONE - did not find; instead did pip install git+https://github.com/openai/CLIP.git
 colorama==0.4.6
 comm==0.1.2
