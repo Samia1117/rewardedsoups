@@ -1,5 +1,5 @@
 transformers
-trl
+trl==0.11.3
 wandb
 torch
 tqdm
