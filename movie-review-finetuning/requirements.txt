@@ -1,0 +1,7 @@
+transformers
+trl
+wandb
+torch
+tqdm
+pandas
+datasets
