@@ -28,11 +28,11 @@ class FineTuneGPT2:
 
         # Change based on positive/negative/neutral movie review type
         
-        model_name_to_save = "gpt2-imdb-pos-v2"
+        model_name_to_save = "./gpt2-imdb-pos-v2"
         if self.review_type == "negative":
-            model_name_to_save = "gpt2-imdb-neg-v2"
+            model_name_to_save = "./gpt2-imdb-neg-v2"
         elif self.review_type == "neutral":
-            model_name_to_save = "gpt2-imdb-neutral-v2"
+            model_name_to_save = "./gpt2-imdb-neutral-v2"
 
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
 
@@ -255,8 +255,8 @@ class FineTuneGPT2:
         print("median:")
         print(df_results[["rewards (before)", "rewards (after)"]].median())
 
-        model.save_pretrained(model_name_to_save, push_to_hub=True)
-        tokenizer.save_pretrained(model_name_to_save, push_to_hub=True)
+        model.save_pretrained(model_name_to_save)
+        tokenizer.save_pretrained(model_name_to_save)
 
 if __name__ == "__main__":
 
