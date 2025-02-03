@@ -8,4 +8,4 @@
 
 source movie-rev-env/bin/activate   # activate python venv with all dependencies installed 
 
-python3 test.py
+python3 finetune_gpt2.py
