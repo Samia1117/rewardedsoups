@@ -30,7 +30,8 @@ class FineTuneGPT2:
         
         model_name_to_save = "./gpt2-imdb-pos-v2"
         if self.review_type == "negative":
-            model_name_to_save = "./gpt2-imdb-neg-v2"
+            model_name_to_save = "./gpt2-imdb-neg-type2-v2" # type1 was assigning high reward to negative scores (separate branch)
+            print("************ Training Model on -1 * Positive review (assign low reward to positive reviews) ************")
         elif self.review_type == "neutral":
             model_name_to_save = "./gpt2-imdb-neutral-v2"
 
@@ -167,9 +168,9 @@ class FineTuneGPT2:
             texts = [q + r for q, r in zip(batch["query"], batch["response"])]
             pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
             
-            # TODO: Change this for negative/neutral review based fine tuning
             positive_scores = [
-                item["score"]
+                # Assign LOW SCORES to 'positiveness' of the generated text
+                -1 * item["score"]
                 for output in pipe_outputs
                 for item in output
                 if item["label"] == "POSITIVE"
@@ -224,41 +225,65 @@ class FineTuneGPT2:
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
         pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        # TODO: Change this for negative/neutral review based fine tuning
         positive_scores = [
             item["score"]
             for output in pipe_outputs
             for item in output
             if item["label"] == "POSITIVE"
         ]
-        game_data["rewards (before)"] = positive_scores
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        game_data["positive rewards (before)"] = positive_scores
+        game_data["negative rewards (before)"] = negative_scores
 
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (after)"])]
         pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        # TODO: Change this for negative/neutral review based fine tuning
         positive_scores = [
             item["score"]
             for output in pipe_outputs
             for item in output
             if item["label"] == "POSITIVE"
         ]
-        game_data["rewards (after)"] = positive_scores
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        # game_data["rewards (after)"] = negative_scores
+        game_data["positive rewards (after)"] = positive_scores
+        game_data["negative rewards (after)"] = negative_scores
 
         # store results in a dataframe
         df_results = pd.DataFrame(game_data)
         df_results
 
         print("mean:")
-        print(df_results[["rewards (before)", "rewards (after)"]].mean())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
         print()
         print("median:")
-        print(df_results[["rewards (before)", "rewards (after)"]].median())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
 
+        # Save model locally
         model.save_pretrained(model_name_to_save)
         tokenizer.save_pretrained(model_name_to_save)
 
+        # Try to push the model to HF HUB as well
+        model.save_pretrained(model_name_to_save,  use_auth_token="hf_jJMgkTqgGFBB1CmvvGpBAbVVUKm1KITgFg")
+        tokenizer.save_pretrained(model_name_to_save,  use_auth_token="hf_jJMgkTqgGFBB1CmvvGpBAbVVUKm1KITgFg")
+
 if __name__ == "__main__":
 
-    ft_gpt2 = FineTuneGPT2("positive")  # positive, negative, neutral
+    ft_gpt2 = FineTuneGPT2("negative")  # positive, negative, neutral
     ft_gpt2.run()
