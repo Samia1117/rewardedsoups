@@ -1,8 +1,9 @@
 from transformers import AutoModel, AutoTokenizer
+from trl import AutoModelForCausalLMWithValueHead
 
 model_name = "carolinezhang/gpt2-imdb-pos"
 
-model = AutoModel.from_pretrained(model_name)
+model = AutoModelForCausalLMWithValueHead.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 prompt = "This movie was"
