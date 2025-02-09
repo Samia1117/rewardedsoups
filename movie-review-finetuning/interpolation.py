@@ -7,6 +7,10 @@ model = AutoModelForCausalLMWithValueHead.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 print(model.state_dict().keys())
+for layer_name in model.state_dict().keys(): 
+    weights = model.state_dict()[layer_name].detach().numpy()
+    print(layer_name)
+    print(weights)
 
 prompt = "This movie was"
 inputs = tokenizer(prompt, return_tensors="pt")
