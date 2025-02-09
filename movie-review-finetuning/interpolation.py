@@ -6,6 +6,8 @@ model_name = "carolinezhang/gpt2-imdb-pos"
 model = AutoModelForCausalLMWithValueHead.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
+print(model.state_dict().keys())
+
 prompt = "This movie was"
 inputs = tokenizer(prompt, return_tensors="pt")
 outputs = model.generate(**inputs, max_length=50)
