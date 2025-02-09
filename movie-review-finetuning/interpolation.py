@@ -1,6 +1,6 @@
 from transformers import AutoModel, AutoTokenizer
 
-model_name = "carolinezhang/gpt2-imdb-pos-v2"
+model_name = "carolinezhang/gpt2-imdb-pos-v2/gpt2-imdb-pos-v2"
 
 model = AutoModel.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
