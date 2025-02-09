@@ -23,6 +23,11 @@ class DefaultArgs:
         "CogComp/bart-faithful-summary-detector"  # format {'0': 'HALLUCINATED', '1': 'FAITHFUL'}, thus requiring --reward_formats '1-0'
     ]
 
+    reward_models_sentiment = [
+        "Samzy17/gpt2-imdb-movie-reviews-negative",
+        "carolinezhang/gpt2-imdb-pos-v2"  # format [{'label': 'NEGATIVE', 'score': 2.335048198699951}, {'label': 'POSITIVE', 'score': -2.726576328277588}], thus requiring --reward_formats '1-0'
+    ]
+
     reward_models_stack = [
         "OpenAssistant/reward-model-deberta-v3-base",
         "OpenAssistant/reward-model-electra-large-discriminator",
