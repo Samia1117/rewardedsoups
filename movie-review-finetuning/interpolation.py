@@ -6,11 +6,18 @@ model_name = "carolinezhang/gpt2-imdb-pos"
 model = AutoModelForCausalLMWithValueHead.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-print(model.state_dict().keys())
-for layer_name in model.state_dict().keys(): 
-    weights = model.state_dict()[layer_name].detach().numpy()
-    print(layer_name)
-    print(weights)
+# print(model.state_dict().keys())
+# for layer_name in model.state_dict().keys(): 
+#     weights = model.state_dict()[layer_name].detach().numpy()
+#     print(layer_name)
+#     print(weights)
+
+test_avg = 0.5*(model.state_dict().keys()[0].detach().numpy()) + 0.5*(model.state_dict().keys()[0].detach().numpy())
+print(test_avg)
+
+first_key = model.state_dict.keys()[0]
+model.state_dict()[first_key] = "new value"
+print(model.state_dict()[first_key])
 
 prompt = "This movie was"
 inputs = tokenizer(prompt, return_tensors="pt")
