@@ -12,10 +12,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 #     print(layer_name)
 #     print(weights)
 
-test_avg = 0.5*(model.state_dict().keys()[0].detach().numpy()) + 0.5*(model.state_dict().keys()[0].detach().numpy())
+first_key = model.state_dict.keys()[0]
+test_avg = 0.5*(model.state_dict()[first_key].detach().numpy()) + 0.5*(model.state_dict()[first_key].detach().numpy())
 print(test_avg)
 
-first_key = model.state_dict.keys()[0]
 model.state_dict()[first_key] = "new value"
 print(model.state_dict()[first_key])
 
