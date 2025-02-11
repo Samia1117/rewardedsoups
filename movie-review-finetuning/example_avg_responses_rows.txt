@@ -79,3 +79,19 @@ Query = POSS
 Reference response = IBLE<|endoftext|>
 Finetuned (avg) response = AD', however is the best
 ########################
+
+mean:
+positive rewards (before)    0.654848
+positive rewards (after)     1.580298
+dtype: float64
+negative rewards (before)   -0.661364
+negative rewards (after)    -1.400650
+dtype: float64
+
+median:
+positive rewards (before)    0.691258
+positive rewards (after)     1.944781
+dtype: float64
+negative rewards (before)   -0.661696
+negative rewards (after)    -1.674694
+dtype: float64
