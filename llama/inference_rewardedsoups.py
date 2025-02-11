@@ -56,9 +56,9 @@ if __name__ == "__main__":
 
     # 2. load models
     if script_args.task == "sentiment-analysis":
-            base_model = inference_utils.Loader.load_base_model("lvwerra/gpt2-imdb")
+        base_model = inference_utils.Loader.load_base_model("lvwerra/gpt2-imdb")
     else:
-         base_model = inference_utils.Loader.load_base_model(script_args.base_model_name)
+        base_model = inference_utils.Loader.load_base_model(script_args.base_model_name)
     reward_pipes = llama_utils.Pipelines.load_pipes(reward_models, device=device)
 
     # 3. inference for wa

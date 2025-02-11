@@ -163,7 +163,7 @@ class WeightAverager:
                 current_model = GPT2Model.from_pretrained("lvwerra/gpt2-imdb")
                 current_weights = current_model.state_dict()
                 print(f"Size of state dictionary = {len(current_weights)} ")
-                print(f"KEYS of state dictionary = {len(current_weights.keys())} ")
+                # print(f"KEYS of state dictionary = {len(current_weights.keys())} ")
             else:
                 current_model = Loader.load_peft_model(base_model, peft_name)
                 current_weights = get_peft_model_state_dict(current_model, state_dict=None)
