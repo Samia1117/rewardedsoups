@@ -1,3 +1,4 @@
+import torch
 from transformers import AutoModel, AutoTokenizer
 from trl import AutoModelForCausalLMWithValueHead
 
@@ -29,22 +30,21 @@ for key in pos_state_dict.keys():
     pos_weights = pos_state_dict[key].detach().numpy()  
     neg_weights = neg_state_dict[key].detach().numpy()
 
-    print(pos_weights)
+    #print(pos_weights)
 
 
     avg_weights = 0.5*pos_weights + 0.5*neg_weights
-    print("avg weights:")
-    print(avg_weights)
+    # print("avg weights:")
+    # print(avg_weights)
 
     no_pretrained = ['v_head.summary.weight', 'v_head.summary.bias']
     if key in no_pretrained:
-        avg_state_dict[key] = avg_weights
+        avg_state_dict[key] = torch.from_numpy(avg_weights)
 
     else:
         key = "pretrained_model."+key
-        avg_state_dict[key] = avg_weights
+        avg_state_dict[key] = torch.from_numpy(avg_weights)
 
-#using the pos model, either should work bc they have the same architecture
 avg_model = AutoModelForCausalLMWithValueHead.from_pretrained(base_model_name)
 avg_model.load_state_dict(avg_state_dict)
 
