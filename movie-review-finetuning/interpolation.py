@@ -14,9 +14,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 first_key = list(model.state_dict().keys())[0]
 test_avg = 0.5*(model.state_dict()[first_key].detach().numpy()) + 0.5*(model.state_dict()[first_key].detach().numpy())
+print("test average:")
 print(test_avg)
 
 model.state_dict()[first_key] = "new value"
+print("modified value of first key:")
 print(model.state_dict()[first_key])
 
 prompt = "This movie was"
