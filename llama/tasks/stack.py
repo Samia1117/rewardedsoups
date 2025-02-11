@@ -7,7 +7,7 @@ from trl.core import LengthSampler
 
 from utils import llama_utils, inference_utils, args_utils
 
-assert torch.cuda.is_available()
+# assert torch.cuda.is_available()
 device = 0 if torch.cuda.is_available() else "cpu"
 
 MIN_SIZE = 5

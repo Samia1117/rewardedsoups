@@ -3,10 +3,11 @@ import os
 
 import numpy as np
 from utils import llama_utils, inference_utils, args_utils
+from transformers import AutoTokenizer
 
 device = 0 if torch.cuda.is_available() else "cpu"
 
-from tasks import assistant, summary, review, stack
+from tasks import assistant, summary, review, stack, sentiment
 
 if __name__ == "__main__":
     default_args = args_utils.DefaultArgsInference()
@@ -18,9 +19,15 @@ if __name__ == "__main__":
     tokenizer = llama_utils.Tokenizer.load_tokenizer(script_args.base_model_name)
 
     if script_args.task == "summary":
+        # reward_models = args_utils.DefaultArgs.reward_models_summary
         reward_models = args_utils.DefaultArgs.reward_models_summary
         predictor_class = summary.PredictorSummary
         samples_class = summary.Samples
+    elif script_args.task == "sentiment-analysis":
+        reward_models = args_utils.DefaultArgs.reward_models_sentiment
+        predictor_class = sentiment.PredictorSentiment
+        samples_class = sentiment.Samples
+        tokenizer = AutoTokenizer.from_pretrained("lvwerra/gpt2-imdb")
     elif script_args.task == "stack":
         reward_models = args_utils.DefaultArgs.reward_models_stack
         predictor_class = stack.PredictorStack
@@ -48,7 +55,10 @@ if __name__ == "__main__":
     print("First decoded query:", tokenizer.decode(query_tensors[0]))
 
     # 2. load models
-    base_model = inference_utils.Loader.load_base_model(script_args.base_model_name)
+    if script_args.task == "sentiment-analysis":
+        base_model = inference_utils.Loader.load_base_model("lvwerra/gpt2-imdb")
+    else:
+        base_model = inference_utils.Loader.load_base_model(script_args.base_model_name)
     reward_pipes = llama_utils.Pipelines.load_pipes(reward_models, device=device)
 
     # 3. inference for wa
@@ -64,6 +74,12 @@ if __name__ == "__main__":
         query_tensors=query_tensors,
         verbose=script_args.verbose
     )
-    inference_utils.get_results_rewards(
+    
+    if script_args.task == "sentiment-analysis":
+            inference_utils.get_results_rewards(
         resultscomputer, peft_names=script_args.peft_names, num_lambdas=script_args.num_lambdas
     )
+    else:
+        inference_utils.get_results_rewards(
+            resultscomputer, peft_names=script_args.peft_names, num_lambdas=script_args.num_lambdas
+        )

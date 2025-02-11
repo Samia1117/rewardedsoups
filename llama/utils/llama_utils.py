@@ -8,6 +8,9 @@ class Pipelines:
 
     @staticmethod
     def load_pipes(reward_models, device):
+        if 'gpt2-imdb' in reward_models:
+            print(f'SENTIMENT ANALYSIS: {reward_models}')
+            return [Pipelines.load_pipe(reward_model, device) for reward_model in reward_models]
         return [
             Pipelines.load_pipe(reward_model, device) for reward_model in reward_models
         ]
@@ -15,7 +18,10 @@ class Pipelines:
     @staticmethod
     def load_pipe(reward_model, device):
         print(f"Load reward model: {reward_model}")
-        pipe = pipeline("text-classification", model=reward_model, device=device,
+        if 'imdb' in reward_model:
+            pipe = pipeline("sentiment-analysis", model="lvwerra/distilbert-imdb", device=0)
+        else:
+            pipe = pipeline("text-classification", model=reward_model, device=device,
                         tokenizer=Tokenizer.load_tokenizer_name(reward_model))
         return pipe
 

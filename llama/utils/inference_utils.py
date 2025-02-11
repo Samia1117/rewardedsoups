@@ -7,6 +7,8 @@ import os
 from transformers import LlamaForCausalLM
 from peft import PeftModel
 from peft.utils.save_and_load import get_peft_model_state_dict
+from trl import AutoModelForCausalLMWithValueHead
+from transformers import GPT2Model
 
 from utils import args_utils
 
@@ -49,7 +51,7 @@ class Predictor:
             for label in a_dict_reward:
                 a_dict_reward[label] = a_dict_reward[label] / len(rewards)
             a_dict_reward["n"] = args_utils.Naming.get_name_model(
-                self.reward_pipes[i].model.name_or_path
+                self.reward_pipes[i]. model.name_or_path
             )
         return avg_reward
 
@@ -103,8 +105,9 @@ class ResultsComputer:
         print("Interpolation")
         dict_coeff_to_reward = {}
         list_coeffs = [x / (num_lambdas-1) for x in range(0, num_lambdas, 1)]
-        for i, coeff in enumerate(list_coeffs):
-            dict_coeff_to_reward[coeff] = self.create_and_call_wa(peft_names, [1 - coeff, coeff])
+        # Create a dictionary of form: "{ 0:[], 0.1:[], 0.2:[], ..., 1:[]}"
+        for coeff in list_coeffs:
+            dict_coeff_to_reward[coeff] = self.create_and_call_wa(peft_names, [1 - coeff, coeff])   # e.g. (peft_names, [0.9, 0.1])
         return dict_coeff_to_reward
 
     def average(self, peft_names):
@@ -154,18 +157,28 @@ class WeightAverager:
             if peft_name is None:
                 print("Skipping none peft_name")
                 continue
-            current_model = Loader.load_peft_model(base_model, peft_name)
-            assert LOAD_ONLY_LORA
-            current_weights = get_peft_model_state_dict(current_model, state_dict=None)
+            # assert LOAD_ONLY_LORA
+            if 'imdb' in peft_name:
+                # current_model = AutoModelForCausalLMWithValueHead.from_pretrained(base_model)
+                current_model = GPT2Model.from_pretrained("lvwerra/gpt2-imdb")
+                current_weights = current_model.state_dict()
+                print(f"Size of state dictionary = {len(current_weights)} ")
+                # print(f"KEYS of state dictionary = {len(current_weights.keys())} ")
+            else:
+                current_model = Loader.load_peft_model(base_model, peft_name)
+                current_weights = get_peft_model_state_dict(current_model, state_dict=None)
             for key in list(current_weights.keys()):
+                print(f"Key = {key}")
                 if i == 0:
                     weights_averaged[key] = coefficient * current_weights[key]
                 else:
                     weights_averaged[key] += coefficient * current_weights[key]
                 del current_weights[key]
             del current_model
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
             i += 1
+        print(f"weights_averaged = {weights_averaged}")
+        print(f'##### DONE with averaging weights #####')
         return weights_averaged
 
     @staticmethod
@@ -174,9 +187,15 @@ class WeightAverager:
             base_model=base_model, peft_names=peft_names, coefficients=coefficients
         )
 
-        torch.cuda.empty_cache()
-        wa = Loader.load_peft_model(base_model, peft_names[0])
-        wa.load_state_dict(weights_averaged, strict=not LOAD_ONLY_LORA)
+        # torch.cuda.empty_cache()
+        if 'Samzy17/gpt2-imdb-movie-reviews-negative' in peft_names:
+            wa = base_model
+            missing_keys, unexpected_keys = wa.load_state_dict(weights_averaged, strict=False)
+            print(f"Missing keys: {missing_keys}")
+            print(f"Unexpected keys: {unexpected_keys}")
+        else:
+            wa = Loader.load_peft_model(base_model, peft_names[0])
+            wa.load_state_dict(weights_averaged, strict=not LOAD_ONLY_LORA)
         return wa
 
 
@@ -184,7 +203,12 @@ class Loader:
 
     @staticmethod
     def load_base_model(base_model_name):
-        base_model = LlamaForCausalLM.from_pretrained(
+        print("Base model name = " + base_model_name)
+
+        if 'imdb' in base_model_name:
+            base_model = AutoModelForCausalLMWithValueHead.from_pretrained(base_model_name)
+        else:
+            base_model = LlamaForCausalLM.from_pretrained(
             base_model_name,
             load_in_8bit=args_utils.LOAD_IN_8BIT,
             device_map="auto",
@@ -227,6 +251,7 @@ def get_last_epoch(peft_name):
 
 
 def get_results_rewards(resultscomputer, peft_names, num_lambdas):
+    print(f"AT GET RESULTS REWARDS, peftnames = {peft_names}")
     if len(peft_names) == 1:
         if peft_names[0] == "nolora":
             dict_coeff_to_reward = {0: resultscomputer.singlenolora()}
@@ -242,7 +267,10 @@ def get_results_rewards(resultscomputer, peft_names, num_lambdas):
         else:
             dict_coeff_to_reward = {0: resultscomputer.single(peft_names[0])}
     elif len(peft_names) == 2:
-        peft_names = [get_last_epoch(peft_name) for peft_name in peft_names]
+        if 'Samzy17/gpt2-imdb-movie-reviews-negative' not in peft_names:
+            peft_names = [get_last_epoch(peft_name) for peft_name in peft_names]
+        else:
+            print("Not obtaining any epochs for Samzy17/gpt2-imdb-movie-reviews-negative")
         dict_coeff_to_reward = resultscomputer.interpolation(peft_names, num_lambdas)
     else:
         dict_coeff_to_reward = {}
