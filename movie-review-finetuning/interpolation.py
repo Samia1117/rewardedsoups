@@ -27,9 +27,13 @@ for key in pos_state_dict.keys():
 
     avg_weights = 0.5*pos_weights + 0.5*neg_weights
 
-    key = "pretrained_model."+key
-
-    avg_state_dict[key] = avg_weights
+    no_pretrained = ['v_head.summary.weight', 'v_head.summary.bias']
+    if key in no_pretrained:
+        avg_state_dict[key] = avg_weights
+        
+    else:
+        key = "pretrained_model."+key
+        avg_state_dict[key] = avg_weights
 
 #using the pos model, either should work bc they have the same architecture
 avg_model = AutoModelForCausalLMWithValueHead.from_pretrained(pos_model_name)
