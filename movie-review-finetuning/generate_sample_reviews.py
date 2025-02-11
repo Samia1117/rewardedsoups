@@ -92,6 +92,10 @@ class Generate:
         dataset.set_format("pandas")
         df_batch = dataset[:].sample(bs)
         game_data["query"] = df_batch["query"].tolist()
+        print("########################")
+        print(f"Queries for both ref/finteuned model = {game_data['query']}")
+        print(f"Queries length = {len(game_data['query'])}")
+        print("########################")
         query_tensors = df_batch["input_ids"].tolist()
 
         response_tensors_ref, response_tensors = [], []
@@ -117,13 +121,34 @@ class Generate:
             response_len = len(query_response) - len(query)
             response_tensors.append(query_response[-response_len:])
 
-        #### decode responses
+        #### decode responses (ref model)
         game_data["response (before)"] = [
             tokenizer.decode(response_tensors_ref[i]) for i in range(bs)
         ]
+        #### decode responses (finetuned model)
         game_data["response (after)"] = [
             tokenizer.decode(response_tensors[i]) for i in range(bs)
-]
+        ]
+
+        print("########################")
+        print(f"game_data for REF mode = {game_data['response (after)']}")
+        print(f"Length = {len(game_data['response (after)'])}")
+        print("")
+        print("########################")
+        print("")
+        print(f"game_data for FINETUNED mode = {game_data['response (before)']}")
+        print(f"Length = {len(game_data['response (before)'])}")
+        print("########################")
+
+        queries = game_data['query']
+        ref_responses = game_data['response (before)']
+        finetuned_responses = game_data['response (after)']
+        for i in range(bs):
+            print("########################")
+            print(f"Query = {queries[i]}")
+            print(f"Reference response = {ref_responses[i]}")
+            print(f"Finetuned (avg) response = {finetuned_responses[i]}")
+            print("########################")
 
         #### sentiment analysis of query/response pairs before/after
         sentiment_pipe = pipeline(
