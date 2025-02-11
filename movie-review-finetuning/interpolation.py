@@ -27,6 +27,8 @@ for key in pos_state_dict.keys():
 
     avg_weights = 0.5*pos_weights + 0.5*neg_weights
 
+    key = "pretrained_model."+key
+
     avg_state_dict[key] = avg_weights
 
 #using the pos model, either should work bc they have the same architecture
