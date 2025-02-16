@@ -15,6 +15,7 @@ from trl.core import LengthSampler
 import wandb
 
 class FineTuneGPT2:
+    #setting review type
     def __init__(self, review_type):
         wandb.init()
         self.review_type = review_type
@@ -96,6 +97,7 @@ class FineTuneGPT2:
         )
 
         ### Load BERT classifier
+        # sentiment analysis to determine pos/neg
         device = ppo_trainer.accelerator.device
         if ppo_trainer.accelerator.num_processes == 1:
             device = 0 if torch.cuda.is_available() else "cpu"  # to avoid a `pipeline` bug
@@ -255,8 +257,8 @@ class FineTuneGPT2:
         print("median:")
         print(df_results[["rewards (before)", "rewards (after)"]].median())
 
-        model.save_pretrained(model_name_to_save, push_to_hub=True)
-        tokenizer.save_pretrained(model_name_to_save, push_to_hub=True)
+        model.save_pretrained(model_name_to_save)
+        tokenizer.save_pretrained(model_name_to_save)
 
 if __name__ == "__main__":
 
