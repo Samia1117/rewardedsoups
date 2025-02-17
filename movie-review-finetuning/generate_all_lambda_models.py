@@ -1,30 +1,27 @@
 import torch
-from tqdm import tqdm
 import pandas as pd
-
-tqdm.pandas()
-
-from transformers import pipeline, AutoTokenizer
-from datasets import load_dataset
-
-from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead
-from trl.core import LengthSampler
+import matplotlib.pyplot as plt
 import wandb
 
-class Generate:
-    # set review type
-    def __init__(self, review_type):
-        wandb.init()
-        self.review_type = review_type
+from tqdm import tqdm
+from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead
+from trl.core import LengthSampler
+from transformers import pipeline, AutoTokenizer
+from datasets import load_dataset
+tqdm.pandas()
 
-    def run(self):
+class Generator:
+    def __init__(self):
+        wandb.init()
+
+    def generate_pf(self):
 
         mean_results = []
         median_results = []
 
         lambdas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
-        num_lambdas = len(lambdas)
-        tokenizer = AutoTokenizer.from_pretrained("lvwerra/gpt2-imdb")
+        base_gpt2_model_name = "lvwerra/gpt2-imdb"
+        tokenizer = AutoTokenizer.from_pretrained(base_gpt2_model_name)
 
         device = 0 if torch.cuda.is_available() else "cpu" 
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
@@ -72,13 +69,13 @@ class Generate:
             ds.set_format(type="torch")
             return ds
         
-        dataset = build_dataset("lvwerra/gpt2-imdb")
+        dataset = build_dataset(base_gpt2_model_name)
         
         for l in lambdas:
-
-            base_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/gpt2-imdb-pos-neg-interpolated-" + str(l)
-            finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(base_model_name)
-            print("###### \n ##### base model name = ", base_model_name)
+            # LOCAL MODEL
+            finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/gpt2-imdb-pos-neg-interpolated-" + str(l)
+            finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(finetuned_model_name)
+            print("###### \n ##### base model name = ", finetuned_model_name)
         
             ### Model Inspection
             '''
@@ -103,20 +100,20 @@ class Generate:
                 query = torch.tensor(query_tensors[i]).to(device)
 
                 gen_len = output_length_sampler()
-                # Response from model with tuned weights
+                # Response from model tuned with a mix of negatively and positively finetuned models' weights
                 query_response = finetuned_model.generate(
                     query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
                 ).squeeze()
                 response_len = len(query_response) - len(query)
                 response_tensors.append(query_response[-response_len:])
         
-            #### decode responses (finetuned model)
+            #### decode responses
             game_data["response (finetuned)"] = [
                 tokenizer.decode(response_tensors[i]) for i in range(bs)
             ]
 
-            queries = game_data['query']
-            finetuned_responses = game_data['response (finetuned)']
+            # queries = game_data['query']
+            # finetuned_responses = game_data['response (finetuned)']
 
             # for i in range(bs):
             #     print("########################")
@@ -154,14 +151,14 @@ class Generate:
             df_results = pd.DataFrame(game_data)
             df_results
 
-            print("mean for lambda: " + str(l))
+            print("Mean for lambda: " + str(l))
             print(df_results[["positive rewards (finetuned)"]].mean())
             print(df_results[["negative rewards (finetuned)"]].mean())
 
             tup_mean = ( float(df_results["positive rewards (finetuned)"].mean()), float(df_results["negative rewards (finetuned)"].mean()) )
             
             print()
-            print("median for lambda :" + str(l))
+            print("Median for lambda :" + str(l))
             print(df_results[["positive rewards (finetuned)"]].median())
             print(df_results[["negative rewards (finetuned)"]].median())
 
@@ -170,23 +167,32 @@ class Generate:
             median_results.append(tup_median)
             mean_results.append(tup_mean)
         
-        print("Mean results = ", mean_results)
-        print("Median results = ", median_results)
+        # print("Mean results (all lambdas) = ", mean_results)
+        print("Median results (all lambdas) = ", median_results)
 
-        import matplotlib.pyplot as plt
-        #plt.plot(x,y)
-        x_list = [m[0] for m in mean_results]
-        y_list = [m[1] for m in mean_results]
+        file = open("example_all_lambdas_run.txt", "w")
+        file.write("Mean results = " + str(mean_results))
+        file.write("\n")
+        file.write("Median results = " + str(median_results))
+
+        x_list = [m[0] for m in median_results]
+        y_list = [m[1] for m in median_results]
+
+        # x_list = [m[0] for m in mean_results]
+        # y_list = [m[1] for m in mean_results]
+
+        for i, lambda_i in enumerate(lambdas):
+            print(f'Lambda = {lambda_i}')
+            print(f'Point = {(x_list[i], y_list[i])}')
         
         plt.xlabel('Positiveness Score')
         plt.ylabel('Negativeness Score')
-        plt.plot(x_list, y_list, "o")
-        for i, txt in enumerate(lambdas):
-            plt.text(x_list[i], y_list[i], txt, ha='center', va='bottom')
-        plt.savefig("frontier-plot.png")
+        plt.scatter(x_list, y_list)
+        for i, lambda_i in enumerate(lambdas):
+            plt.annotate(lambda_i, (x_list[i], y_list[i]))
+        plt.savefig("frontier_median_plot.png")
 
 
 if __name__ == "__main__":
-
-    ft_gpt2 = Generate("neutral")  # positive, negative, neutral
-    ft_gpt2.run()
+    model_gen = Generator()  
+    model_gen.generate_pf()
