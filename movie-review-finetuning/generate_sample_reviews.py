@@ -20,18 +20,22 @@ class Generate:
     def run(self):
 
         # Change based on positive/negative/neutral movie review type
-        model_name_to_save = "gpt2-imdb-pos-v2"
+        # model_name_to_save = "gpt2-imdb-pos-v2"
         base_model_name = "carolinezhang/gpt2-imdb-pos-v2"
         if self.review_type == "negative":
             model_name_to_save = "gpt2-imdb-neg-v2"
             base_model_name = "Samzy17/gpt2-imdb-movie-reviews-negative"
         elif self.review_type == "neutral":
             model_name_to_save = "gpt2-imdb-neutral-v2"
+            print("Choosing neutral model #######")
             base_model_name = "Samzy17/gpt2-imdb-pos-neg-averaged"
 
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained("lvwerra/gpt2-imdb")
         tokenizer = AutoTokenizer.from_pretrained("lvwerra/gpt2-imdb")
         finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(base_model_name)
+        # TODO: obtain responses from
+        finetuned_pos_model = AutoModelForCausalLMWithValueHead.from_pretrained("carolinezhang/gpt2-imdb-pos")
+        finetuned_neg_model = AutoModelForCausalLMWithValueHead.from_pretrained("Samzy17/gpt2-imdb-movie-reviews-negative")
         
         device = 0 if torch.cuda.is_available() else "cpu" 
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
@@ -99,6 +103,7 @@ class Generate:
         query_tensors = df_batch["input_ids"].tolist()
 
         response_tensors_ref, response_tensors = [], []
+        response_tensors_pos, response_tensors_neg = [], []
 
         output_min_length = 4
         output_max_length = 16
@@ -109,17 +114,34 @@ class Generate:
             query = torch.tensor(query_tensors[i]).to(device)
 
             gen_len = output_length_sampler()
+
+            # Base model
             query_response = ref_model.generate(
                 query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
             ).squeeze()
             response_len = len(query_response) - len(query)
             response_tensors_ref.append(query_response[-response_len:])
 
+            # Avg
             query_response = finetuned_model.generate(
                 query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
             ).squeeze()
             response_len = len(query_response) - len(query)
             response_tensors.append(query_response[-response_len:])
+
+            # Pos
+            query_response = finetuned_pos_model.generate(
+                query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
+            ).squeeze()
+            response_len = len(query_response) - len(query)
+            response_tensors_pos.append(query_response[-response_len:])
+
+            # Neg
+            query_response = finetuned_neg_model.generate(
+                query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
+            ).squeeze()
+            response_len = len(query_response) - len(query)
+            response_tensors_neg.append(query_response[-response_len:])
 
         #### decode responses (ref model)
         game_data["response (before)"] = [
@@ -130,24 +152,50 @@ class Generate:
             tokenizer.decode(response_tensors[i]) for i in range(bs)
         ]
 
-        print("########################")
-        print(f"game_data for REF mode = {game_data['response (after)']}")
-        print(f"Length = {len(game_data['response (after)'])}")
-        print("")
-        print("########################")
-        print("")
-        print(f"game_data for FINETUNED mode = {game_data['response (before)']}")
-        print(f"Length = {len(game_data['response (before)'])}")
-        print("########################")
+        #### decode responses (finetuned POS model)
+        game_data["response (pos)"] = [
+            tokenizer.decode(response_tensors_pos[i]) for i in range(bs)
+        ]
+        #### decode responses (finetuned NEG model)
+        game_data["response (neg)"] = [
+            tokenizer.decode(response_tensors_neg[i]) for i in range(bs)
+        ]
+
+        # print("########################")
+        # print(f"game_data for REF mode = {game_data['response (after)']}")
+        # print(f"Length = {len(game_data['response (after)'])}")
+        # print("")
+        # print("########################")
+        # print("")
+        # print(f"game_data for FINETUNED mode = {game_data['response (before)']}")
+        # print(f"Length = {len(game_data['response (before)'])}")
+        # print("########################")
+
+        # print("########################")
+        # print(f"game_data for REF mode = {game_data['response (pos)']}")
+        # print(f"Length = {len(game_data['response (po)'])}")
+        # print("")
+        # print("########################")
+        # print("")
+        # print(f"game_data for FINETUNED mode = {game_data['response (before)']}")
+        # print(f"Length = {len(game_data['response (before)'])}")
+        # print("########################")
 
         queries = game_data['query']
         ref_responses = game_data['response (before)']
         finetuned_responses = game_data['response (after)']
+        finetuned_pos_responses = game_data['response (pos)']
+        finetuned_neg_responses = game_data['response (neg)']
+
+
+        print("base model name = ", base_model_name)
         for i in range(bs):
             print("########################")
             print(f"Query = {queries[i]}")
             print(f"Reference response = {ref_responses[i]}")
             print(f"Finetuned (avg) response = {finetuned_responses[i]}")
+            print(f"Finetuned (pos) response = {finetuned_pos_responses[i]}")
+            print(f"Finetuned (neg) response = {finetuned_neg_responses[i]}")
             print("########################")
 
         #### sentiment analysis of query/response pairs before/after
@@ -196,17 +244,62 @@ class Generate:
         game_data["positive rewards (after)"] = positive_scores
         game_data["negative rewards (after)"] = negative_scores
 
+        # ##### Results of positive finetuned model
+        texts = [q + r for q, r in zip(game_data["query"], game_data["response (pos)"])]
+        pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
+
+        positive_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "POSITIVE"
+        ]
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        game_data["positive rewards (pos)"] = positive_scores
+        game_data["negative rewards (pos)"] = negative_scores
+
+        # ##### Results of negative finetuned model
+        texts = [q + r for q, r in zip(game_data["query"], game_data["response (neg)"])]
+        pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
+
+        positive_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "POSITIVE"
+        ]
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        game_data["positive rewards (neg)"] = positive_scores
+        game_data["negative rewards (neg)"] = negative_scores
+
+        
+
         # store results in a dataframe
         df_results = pd.DataFrame(game_data)
         df_results
 
         print("mean:")
-        print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
-        print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
+        print(df_results[["positive rewards (before)", "positive rewards (after)", "positive rewards (pos)", "positive rewards (neg)"]].mean())
+        print(df_results[["negative rewards (before)", "negative rewards (after)", "negative rewards (pos)", "negative rewards (neg)"]].mean())
+        
         print()
         print("median:")
-        print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
-        print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
+        print(df_results[["positive rewards (before)", "positive rewards (after)", "positive rewards (pos)", "positive rewards (neg)"]].median())
+        print(df_results[["negative rewards (before)", "negative rewards (after)", "negative rewards (pos)", "negative rewards (neg)"]].median())
 
 if __name__ == "__main__":
 
