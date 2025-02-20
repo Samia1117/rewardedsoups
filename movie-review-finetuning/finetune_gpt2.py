@@ -16,9 +16,8 @@ import wandb
 
 class FineTuneGPT2:
     #setting review type
-    def __init__(self, review_type):
+    def __init__(self):
         wandb.init()
-        self.review_type = review_type
 
     def run(self):
         # Config
@@ -29,11 +28,11 @@ class FineTuneGPT2:
 
         # Change based on positive/negative/neutral movie review type
         
-        model_name_to_save = "gpt2-imdb-pos-v2"
-        if self.review_type == "negative":
-            model_name_to_save = "gpt2-imdb-neg-v2"
-        elif self.review_type == "neutral":
-            model_name_to_save = "gpt2-imdb-neutral-v2"
+        model_name_to_save = "gpt2-imdb-0.5pos-0.5neg"
+        # if self.review_type == "negative":
+        #     model_name_to_save = "gpt2-imdb-neg-v2"
+        # elif self.review_type == "neutral":
+        #     model_name_to_save = "gpt2-imdb-neutral-v2"
 
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
 
@@ -137,11 +136,9 @@ class FineTuneGPT2:
 
         This step takes ~2h on a V100 GPU with the above specified settings.
         '''
-
         output_min_length = 4
         output_max_length = 16
         output_length_sampler = LengthSampler(output_min_length, output_max_length)
-
 
         generation_kwargs = {
             "min_length": -1,
@@ -150,7 +147,6 @@ class FineTuneGPT2:
             "do_sample": True,
             "pad_token_id": tokenizer.eos_token_id,
         }
-
 
         for epoch, batch in enumerate(tqdm(ppo_trainer.dataloader)):
             query_tensors = batch["input_ids"]
@@ -176,7 +172,21 @@ class FineTuneGPT2:
                 for item in output
                 if item["label"] == "POSITIVE"
             ]
-            rewards = [torch.tensor(score) for score in positive_scores]
+
+            ## Define rewards below
+            # rewards = [torch.tensor(score) for score in positive_scores]
+
+            negative_scores = [
+                item["score"]
+                for output in pipe_outputs
+                for item in output
+                if item["label"] == "NEGATIVE"
+            ]
+
+            rewards = []
+            for i in range(len(negative_scores)):
+                score = (0.5 * negative_scores[i]) + (0.5 * positive_scores[i])
+                rewards.append(torch.tensor(score))
 
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
