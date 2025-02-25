@@ -91,7 +91,7 @@ class Generate:
         We can use ref_model to compare the finetuned model against the ref model before optimisation.
         '''
         #### get a batch from the dataset
-        bs = 16
+        bs = 32
         game_data = dict()
         dataset.set_format("pandas")
         df_batch = dataset[:].sample(bs)
@@ -105,8 +105,8 @@ class Generate:
         response_tensors_ref, response_tensors = [], []
         response_tensors_pos, response_tensors_neg = [], []
 
-        output_min_length = 4
-        output_max_length = 16
+        output_min_length = 5
+        output_max_length = 32
         output_length_sampler = LengthSampler(output_min_length, output_max_length)
 
         #### get response from gpt2 and gpt2_ref
@@ -115,12 +115,12 @@ class Generate:
 
             gen_len = output_length_sampler()
 
-            # Base model
-            query_response = ref_model.generate(
-                query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
-            ).squeeze()
-            response_len = len(query_response) - len(query)
-            response_tensors_ref.append(query_response[-response_len:])
+            # # Base model
+            # query_response = ref_model.generate(
+            #     query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
+            # ).squeeze()
+            # response_len = len(query_response) - len(query)
+            # response_tensors_ref.append(query_response[-response_len:])
 
             # Avg
             query_response = finetuned_model.generate(
@@ -129,37 +129,38 @@ class Generate:
             response_len = len(query_response) - len(query)
             response_tensors.append(query_response[-response_len:])
 
-            # Pos
-            query_response = finetuned_pos_model.generate(
-                query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
-            ).squeeze()
-            response_len = len(query_response) - len(query)
-            response_tensors_pos.append(query_response[-response_len:])
+            # # Pos
+            # query_response = finetuned_pos_model.generate(
+            #     query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
+            # ).squeeze()
+            # response_len = len(query_response) - len(query)
+            # response_tensors_pos.append(query_response[-response_len:])
 
-            # Neg
-            query_response = finetuned_neg_model.generate(
-                query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
-            ).squeeze()
-            response_len = len(query_response) - len(query)
-            response_tensors_neg.append(query_response[-response_len:])
+            # # Neg
+            # query_response = finetuned_neg_model.generate(
+            #     query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
+            # ).squeeze()
+            # response_len = len(query_response) - len(query)
+            # response_tensors_neg.append(query_response[-response_len:])
 
-        #### decode responses (ref model)
-        game_data["response (before)"] = [
-            tokenizer.decode(response_tensors_ref[i]) for i in range(bs)
-        ]
+        # #### decode responses (ref model)
+        # game_data["response (before)"] = [
+        #     tokenizer.decode(response_tensors_ref[i]) for i in range(bs)
+        # ]
+            
         #### decode responses (finetuned model)
         game_data["response (after)"] = [
             tokenizer.decode(response_tensors[i]) for i in range(bs)
         ]
 
-        #### decode responses (finetuned POS model)
-        game_data["response (pos)"] = [
-            tokenizer.decode(response_tensors_pos[i]) for i in range(bs)
-        ]
-        #### decode responses (finetuned NEG model)
-        game_data["response (neg)"] = [
-            tokenizer.decode(response_tensors_neg[i]) for i in range(bs)
-        ]
+        # #### decode responses (finetuned POS model)
+        # game_data["response (pos)"] = [
+        #     tokenizer.decode(response_tensors_pos[i]) for i in range(bs)
+        # ]
+        # #### decode responses (finetuned NEG model)
+        # game_data["response (neg)"] = [
+        #     tokenizer.decode(response_tensors_neg[i]) for i in range(bs)
+        # ]
 
         # print("########################")
         # print(f"game_data for REF mode = {game_data['response (after)']}")
@@ -182,20 +183,20 @@ class Generate:
         # print("########################")
 
         queries = game_data['query']
-        ref_responses = game_data['response (before)']
+        # ref_responses = game_data['response (before)']
         finetuned_responses = game_data['response (after)']
-        finetuned_pos_responses = game_data['response (pos)']
-        finetuned_neg_responses = game_data['response (neg)']
+        # finetuned_pos_responses = game_data['response (pos)']
+        # finetuned_neg_responses = game_data['response (neg)']
 
 
         print("base model name = ", base_model_name)
         for i in range(bs):
             print("########################")
             print(f"Query = {queries[i]}")
-            print(f"Reference response = {ref_responses[i]}")
+            #print(f"Reference response = {ref_responses[i]}")
             print(f"Finetuned (avg) response = {finetuned_responses[i]}")
-            print(f"Finetuned (pos) response = {finetuned_pos_responses[i]}")
-            print(f"Finetuned (neg) response = {finetuned_neg_responses[i]}")
+            # print(f"Finetuned (pos) response = {finetuned_pos_responses[i]}")
+            # print(f"Finetuned (neg) response = {finetuned_neg_responses[i]}")
             print("########################")
 
         #### sentiment analysis of query/response pairs before/after
@@ -203,25 +204,25 @@ class Generate:
             "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
         )
 
-        # ##### Results of reference model
-        texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
-        pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
+        # # ##### Results of reference model
+        # texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
+        # pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        positive_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "POSITIVE"
-        ]
+        # positive_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "POSITIVE"
+        # ]
 
-        negative_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "NEGATIVE"
-        ]
-        game_data["positive rewards (before)"] = positive_scores
-        game_data["negative rewards (before)"] = negative_scores
+        # negative_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "NEGATIVE"
+        # ]
+        # game_data["positive rewards (before)"] = positive_scores
+        # game_data["negative rewards (before)"] = negative_scores
 
         # ##### Results of finetuned model
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (after)"])]
@@ -244,47 +245,47 @@ class Generate:
         game_data["positive rewards (after)"] = positive_scores
         game_data["negative rewards (after)"] = negative_scores
 
-        # ##### Results of positive finetuned model
-        texts = [q + r for q, r in zip(game_data["query"], game_data["response (pos)"])]
-        pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
+        # # ##### Results of positive finetuned model
+        # texts = [q + r for q, r in zip(game_data["query"], game_data["response (pos)"])]
+        # pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        positive_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "POSITIVE"
-        ]
+        # positive_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "POSITIVE"
+        # ]
 
-        negative_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "NEGATIVE"
-        ]
+        # negative_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "NEGATIVE"
+        # ]
 
-        game_data["positive rewards (pos)"] = positive_scores
-        game_data["negative rewards (pos)"] = negative_scores
+        # game_data["positive rewards (pos)"] = positive_scores
+        # game_data["negative rewards (pos)"] = negative_scores
 
-        # ##### Results of negative finetuned model
-        texts = [q + r for q, r in zip(game_data["query"], game_data["response (neg)"])]
-        pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
+        # # ##### Results of negative finetuned model
+        # texts = [q + r for q, r in zip(game_data["query"], game_data["response (neg)"])]
+        # pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        positive_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "POSITIVE"
-        ]
+        # positive_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "POSITIVE"
+        # ]
 
-        negative_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "NEGATIVE"
-        ]
+        # negative_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "NEGATIVE"
+        # ]
 
-        game_data["positive rewards (neg)"] = positive_scores
-        game_data["negative rewards (neg)"] = negative_scores
+        # game_data["positive rewards (neg)"] = positive_scores
+        # game_data["negative rewards (neg)"] = negative_scores
 
         
 
