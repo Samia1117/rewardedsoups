@@ -20,6 +20,7 @@ class Generator:
         median_results = []
 
         lambdas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+        
         base_gpt2_model_name = "lvwerra/gpt2-imdb"
         tokenizer = AutoTokenizer.from_pretrained(base_gpt2_model_name)
 
@@ -73,7 +74,8 @@ class Generator:
         
         for l in lambdas:
             # LOCAL MODEL
-            finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/gpt2-imdb-pos-neg-interpolated-" + str(l)
+            # finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/gpt2-imdb-pos-neg-interpolated-" + str(l)
+            finetuned_model_name =  "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/" + l
             finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(finetuned_model_name)
             print("###### \n ##### base model name = ", finetuned_model_name)
         
@@ -83,7 +85,7 @@ class Generator:
             We can use ref_model to compare the finetuned model against the ref model before optimisation.
             '''
             #### get a batch from the dataset
-            bs = 16
+            bs = 200
             game_data = dict()
             dataset.set_format("pandas")
             df_batch = dataset[:].sample(bs)
@@ -115,12 +117,6 @@ class Generator:
             # queries = game_data['query']
             # finetuned_responses = game_data['response (finetuned)']
 
-            # for i in range(bs):
-            #     print("########################")
-            #     print(f"Query = {queries[i]}")
-            #     print(f"Finetuned response = {finetuned_responses[i]}")
-            #     print("########################")
-
             #### sentiment analysis of query/response pairs before/after
             sentiment_pipe = pipeline(
                 "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
@@ -145,20 +141,21 @@ class Generator:
             ]
             game_data["positive rewards (finetuned)"] = positive_scores
             game_data["negative rewards (finetuned)"] = negative_scores
-            
 
             # store results in a dataframe
             df_results = pd.DataFrame(game_data)
             df_results
 
-            print("Mean for lambda: " + str(l))
+            # print("Mean for lambda: " + str(l))
+            print("Mean for model: " + l)
             print(df_results[["positive rewards (finetuned)"]].mean())
             print(df_results[["negative rewards (finetuned)"]].mean())
 
             tup_mean = ( float(df_results["positive rewards (finetuned)"].mean()), float(df_results["negative rewards (finetuned)"].mean()) )
             
             print()
-            print("Median for lambda :" + str(l))
+            # print("Median for lambda :" + str(l))
+            print("Median for model :" + l)
             print(df_results[["positive rewards (finetuned)"]].median())
             print(df_results[["negative rewards (finetuned)"]].median())
 

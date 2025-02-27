@@ -28,11 +28,9 @@ class FineTuneGPT2:
 
         # Change based on positive/negative/neutral movie review type
         
-        model_name_to_save = "gpt2-imdb-0.5pos-0.5neg"
-        # if self.review_type == "negative":
-        #     model_name_to_save = "gpt2-imdb-neg-v2"
-        # elif self.review_type == "neutral":
-        #     model_name_to_save = "gpt2-imdb-neutral-v2"
+        # model_name_to_save = "gpt2-imdb-0.5pos-0.5neg"
+        model_name_to_save = "gpt2-imdb-0.1pos-0.9neg"
+        print(f'Training model = {model_name_to_save}')
 
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
 
@@ -100,16 +98,10 @@ class FineTuneGPT2:
         device = ppo_trainer.accelerator.device
         if ppo_trainer.accelerator.num_processes == 1:
             device = 0 if torch.cuda.is_available() else "cpu"  # to avoid a `pipeline` bug
+
         sentiment_pipe = pipeline(
             "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
         )
-
-        # Print some examples
-        text = "this movie was really bad!!"
-        sentiment_pipe(text, **sent_kwargs)
-
-        text = "this movie was really good!!"
-        sentiment_pipe(text, **sent_kwargs)
 
         ### Generation Settings
         ''' 
@@ -185,7 +177,7 @@ class FineTuneGPT2:
 
             rewards = []
             for i in range(len(negative_scores)):
-                score = (0.5 * negative_scores[i]) + (0.5 * positive_scores[i])
+                score = (0.1 * positive_scores[i]) + (0.9 * negative_scores[i])
                 rewards.append(torch.tensor(score))
 
             #### Run PPO step
@@ -272,5 +264,5 @@ class FineTuneGPT2:
 
 if __name__ == "__main__":
 
-    ft_gpt2 = FineTuneGPT2("positive")  # positive, negative, neutral
+    ft_gpt2 = FineTuneGPT2()
     ft_gpt2.run()

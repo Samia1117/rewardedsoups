@@ -19,7 +19,10 @@ class Generator:
         mean_results = []
         median_results = []
 
-        lambdas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+        # lambdas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+        lambdas = ['gpt2-imdb-0.1pos-0.9neg', 'gpt2-imdb-0.3pos-0.7neg', 'gpt2-imdb-0.4pos-0.6neg', 
+        'gpt2-imdb-0.5pos-0.5neg',  'gpt2-imdb-0.6pos-0.4neg', 'gpt2-imdb-0.7pos-0.3neg', 'gpt2-imdb-0.9pos-0.1neg']
+
         base_gpt2_model_name = "lvwerra/gpt2-imdb"
         tokenizer = AutoTokenizer.from_pretrained(base_gpt2_model_name)
 
@@ -34,23 +37,8 @@ class Generator:
         }
 
         ### Load IMDB dataset
-        '''The IMDB dataset contains 50k movie review annotated with "positive"/"negative" feedback indicating the sentiment.  
-        We load the IMDB dataset into a DataFrame and filter for comments that are at least 200 characters. 
-        Then we tokenize each text and cut it to random size with the `LengthSampler`. '''
-
         def build_dataset(model_name, dataset_name="stanfordnlp/imdb",input_min_text_length=2,input_max_text_length=8,):
-            """
-            Build dataset for training. This builds the dataset from `load_dataset`, one should
-            customize this function to train the model on its own dataset.
 
-            Args:
-                dataset_name (`str`):
-                    The name of the dataset to be loaded.
-
-            Returns:
-                dataloader (`torch.utils.data.DataLoader`):
-                    The dataloader for the dataset.
-            """
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             tokenizer.pad_token = tokenizer.eos_token
             # load imdb with datasets
@@ -73,7 +61,7 @@ class Generator:
         
         for l in lambdas:
             # LOCAL MODEL
-            finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/gpt2-imdb-pos-neg-interpolated-fixed" + str(l)
+            finetuned_model_name = "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/" + l
             finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(finetuned_model_name)
             print("###### \n ##### base model name = ", finetuned_model_name)
         
@@ -83,7 +71,7 @@ class Generator:
             We can use ref_model to compare the finetuned model against the ref model before optimisation.
             '''
             #### get a batch from the dataset
-            bs = 16
+            bs = 200
             game_data = dict()
             dataset.set_format("pandas")
             df_batch = dataset[:].sample(bs)
@@ -112,15 +100,6 @@ class Generator:
                 tokenizer.decode(response_tensors[i]) for i in range(bs)
             ]
 
-            # queries = game_data['query']
-            # finetuned_responses = game_data['response (finetuned)']
-
-            # for i in range(bs):
-            #     print("########################")
-            #     print(f"Query = {queries[i]}")
-            #     print(f"Finetuned response = {finetuned_responses[i]}")
-            #     print("########################")
-
             #### sentiment analysis of query/response pairs before/after
             sentiment_pipe = pipeline(
                 "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
@@ -146,19 +125,18 @@ class Generator:
             game_data["positive rewards (finetuned)"] = positive_scores
             game_data["negative rewards (finetuned)"] = negative_scores
             
-
             # store results in a dataframe
             df_results = pd.DataFrame(game_data)
             df_results
 
-            print("Mean for lambda: " + str(l))
+            print("Mean for model: " + l)
             print(df_results[["positive rewards (finetuned)"]].mean())
             print(df_results[["negative rewards (finetuned)"]].mean())
 
             tup_mean = ( float(df_results["positive rewards (finetuned)"].mean()), float(df_results["negative rewards (finetuned)"].mean()) )
             
             print()
-            print("Median for lambda :" + str(l))
+            print("Median for model :" + l)
             print(df_results[["positive rewards (finetuned)"]].median())
             print(df_results[["negative rewards (finetuned)"]].median())
 
@@ -170,19 +148,19 @@ class Generator:
         print("Mean results (all lambdas) = ", mean_results)
         print("Median results (all lambdas) = ", median_results)
 
-        file = open("example_all_lambdas_run.txt", "w")
+        file = open("results_median_no_interpolation.txt", "w")
         file.write("Mean results = " + str(mean_results))
         file.write("\n")
         file.write("Median results = " + str(median_results))
 
-        # x_list = [m[0] for m in median_results]
-        # y_list = [m[1] for m in median_results]
+        x_list = [m[0] for m in median_results]
+        y_list = [m[1] for m in median_results]
 
-        x_list = [m[0] for m in mean_results]
-        y_list = [m[1] for m in mean_results]
+        # x_list = [m[0] for m in mean_results]
+        # y_list = [m[1] for m in mean_results]
 
         for i, lambda_i in enumerate(lambdas):
-            print(f'Lambda = {lambda_i}')
+            print(f'Model = {lambda_i}')
             print(f'Point = {(x_list[i], y_list[i])}')
         
         plt.xlabel('Positiveness Score')
@@ -191,8 +169,8 @@ class Generator:
         for i, lambda_i in enumerate(lambdas):
             plt.annotate(lambda_i, (x_list[i], y_list[i]))
         
-        # plt.savefig("frontier_median_plot.png")
-        plt.savefig("frontier_mean_plot.png")
+        plt.savefig("all_non_interpolated_median_plot.png")
+        # plt.savefig("all_non_interpolated_mean_plot.png")
 
 
 if __name__ == "__main__":
