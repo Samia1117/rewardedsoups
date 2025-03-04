@@ -15,24 +15,16 @@ from trl.core import LengthSampler
 import wandb
 
 class FineTuneGPT2:
-    def __init__(self, review_type):
+    def __init__(self):
         wandb.init()
-        self.review_type = review_type
 
     def run(self):
-        # Config
         config = PPOConfig(
             model_name="lvwerra/gpt2-imdb",
             learning_rate=1.41e-5,
             log_with="wandb",)
-
-        # Change based on positive/negative/neutral movie review type
         
-        model_name_to_save = "gpt2-imdb-pos-v2"
-        if self.review_type == "negative":
-            model_name_to_save = "gpt2-imdb-neg-v2"
-        elif self.review_type == "neutral":
-            model_name_to_save = "gpt2-imdb-neutral-v2"
+        model_name_to_save = "./gpt2-imdb-concise-reviews"
 
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
 
@@ -103,13 +95,6 @@ class FineTuneGPT2:
             "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
         )
 
-        # Print some examples
-        text = "this movie was really bad!!"
-        sentiment_pipe(text, **sent_kwargs)
-
-        text = "this movie was really good!!"
-        sentiment_pipe(text, **sent_kwargs)
-
         ### Generation Settings
         ''' 
         For the response generation we just use sampling and make sure top-k and nucleus sampling are turned off as well as 
@@ -140,7 +125,6 @@ class FineTuneGPT2:
         output_max_length = 16
         output_length_sampler = LengthSampler(output_min_length, output_max_length)
 
-
         generation_kwargs = {
             "min_length": -1,
             "top_k": 0.0,
@@ -148,7 +132,6 @@ class FineTuneGPT2:
             "do_sample": True,
             "pad_token_id": tokenizer.eos_token_id,
         }
-
 
         for epoch, batch in enumerate(tqdm(ppo_trainer.dataloader)):
             query_tensors = batch["input_ids"]
@@ -167,14 +150,19 @@ class FineTuneGPT2:
             texts = [q + r for q, r in zip(batch["query"], batch["response"])]
             pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
             
-            # TODO: Change this for negative/neutral review based fine tuning
             positive_scores = [
-                item["score"]
+                # Assign LOW SCORES to 'positiveness' of the generated text
+                -1 * item["score"]
                 for output in pipe_outputs
                 for item in output
                 if item["label"] == "POSITIVE"
             ]
-            rewards = [torch.tensor(score) for score in positive_scores]
+
+            rewards = []
+            for i in range(len(positive_scores)):
+                print(f'response_tensors[i] = {response_tensors[i]}')
+                score = (0.5 * positive_scores[i]) + (0.5 * len(response_tensors[i]))
+                rewards.append(torch.tensor(score))
 
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
@@ -224,41 +212,65 @@ class FineTuneGPT2:
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
         pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        # TODO: Change this for negative/neutral review based fine tuning
         positive_scores = [
             item["score"]
             for output in pipe_outputs
             for item in output
             if item["label"] == "POSITIVE"
         ]
-        game_data["rewards (before)"] = positive_scores
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        game_data["positive rewards (before)"] = positive_scores
+        game_data["negative rewards (before)"] = negative_scores
 
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (after)"])]
         pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        # TODO: Change this for negative/neutral review based fine tuning
         positive_scores = [
             item["score"]
             for output in pipe_outputs
             for item in output
             if item["label"] == "POSITIVE"
         ]
-        game_data["rewards (after)"] = positive_scores
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        # game_data["rewards (after)"] = negative_scores
+        game_data["positive rewards (after)"] = positive_scores
+        game_data["negative rewards (after)"] = negative_scores
 
         # store results in a dataframe
         df_results = pd.DataFrame(game_data)
         df_results
 
         print("mean:")
-        print(df_results[["rewards (before)", "rewards (after)"]].mean())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
         print()
         print("median:")
-        print(df_results[["rewards (before)", "rewards (after)"]].median())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
 
-        model.save_pretrained(model_name_to_save, push_to_hub=True)
-        tokenizer.save_pretrained(model_name_to_save, push_to_hub=True)
+        # Save model locally
+        model.save_pretrained(model_name_to_save)
+        tokenizer.save_pretrained(model_name_to_save)
+
+        # # Try to push the model to HF HUB as well
+        # model.save_pretrained(model_name_to_save,  use_auth_token="hf_jJMgkTqgGFBB1CmvvGpBAbVVUKm1KITgFg")
+        # tokenizer.save_pretrained(model_name_to_save,  use_auth_token="hf_jJMgkTqgGFBB1CmvvGpBAbVVUKm1KITgFg")
 
 if __name__ == "__main__":
 
-    ft_gpt2 = FineTuneGPT2("positive")  # positive, negative, neutral
+    ft_gpt2 = FineTuneGPT2()  # positive, negative, neutral
     ft_gpt2.run()
