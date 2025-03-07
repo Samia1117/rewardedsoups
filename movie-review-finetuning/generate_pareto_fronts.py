@@ -19,9 +19,7 @@ class Generator:
         mean_results = []
         median_results = []
 
-        # lambdas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
-        lambdas = ['gpt2-imdb-0.1pos-0.9neg', 'gpt2-imdb-0.3pos-0.7neg', 'gpt2-imdb-0.4pos-0.6neg', 
-        'gpt2-imdb-0.5pos-0.5neg',  'gpt2-imdb-0.6pos-0.4neg', 'gpt2-imdb-0.7pos-0.3neg', 'gpt2-imdb-0.9pos-0.1neg']
+        lambdas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
         base_gpt2_model_name = "lvwerra/gpt2-imdb"
         tokenizer = AutoTokenizer.from_pretrained(base_gpt2_model_name)
@@ -60,8 +58,7 @@ class Generator:
         dataset = build_dataset(base_gpt2_model_name)
         
         for l in lambdas:
-            # LOCAL MODEL
-            finetuned_model_name = "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/" + l
+            finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/movie-review-finetuning/gpt2-pos-concise/gpt2-imdb-pos-concise-" + str(l)
             finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(finetuned_model_name)
             print("###### \n ##### base model name = ", finetuned_model_name)
         
@@ -83,12 +80,12 @@ class Generator:
             output_max_length = 16
             output_length_sampler = LengthSampler(output_min_length, output_max_length)
 
-            #### get response from model tuned using pos and neg weights
+            #### get response from model tuned using pos and conc weights
             for i in range(bs):
                 query = torch.tensor(query_tensors[i]).to(device)
 
                 gen_len = output_length_sampler()
-                # Response from model tuned with a mix of negatively and positively finetuned models' weights
+                # Response from model tuned with a mix of weights from conciseness and positiveness finetuned models
                 query_response = finetuned_model.generate(
                     query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
                 ).squeeze()
@@ -116,62 +113,58 @@ class Generator:
                 if item["label"] == "POSITIVE"
             ]
 
-            negative_scores = [
-                item["score"]
-                for output in pipe_outputs
-                for item in output
-                if item["label"] == "NEGATIVE"
-            ]
+            conciseness_scores = []
+            for i in range(len(positive_scores)):
+                conciseness_scores.append(len(response_tensors[i]))
+            
             game_data["positive rewards (finetuned)"] = positive_scores
-            game_data["negative rewards (finetuned)"] = negative_scores
+            game_data["Conciseness score (finetuned)"] = conciseness_scores
             
             # store results in a dataframe
             df_results = pd.DataFrame(game_data)
             df_results
 
-            print("Mean for model: " + l)
+            print("Mean for model: ")
             print(df_results[["positive rewards (finetuned)"]].mean())
-            print(df_results[["negative rewards (finetuned)"]].mean())
+            print(df_results[["Conciseness score (finetuned)"]].mean())
 
-            tup_mean = ( float(df_results["positive rewards (finetuned)"].mean()), float(df_results["negative rewards (finetuned)"].mean()) )
+            tup_mean = ( float(df_results["positive rewards (finetuned)"].mean()), float(df_results["Conciseness score (finetuned)"].mean()) )
             
             print()
-            print("Median for model :" + l)
+            print("Median for model :")
             print(df_results[["positive rewards (finetuned)"]].median())
-            print(df_results[["negative rewards (finetuned)"]].median())
+            print(df_results[["Conciseness score (finetuned)"]].median())
 
-            tup_median = (float(df_results["positive rewards (finetuned)"].median()), float(df_results["negative rewards (finetuned)"].median()))
+            tup_median = (float(df_results["positive rewards (finetuned)"].median()), float(df_results["Conciseness score (finetuned)"].median()))
             
             median_results.append(tup_median)
             mean_results.append(tup_mean)
         
-        print("Mean results (all lambdas) = ", mean_results)
-        print("Median results (all lambdas) = ", median_results)
+        print(f"Mean results for pos-concise model =  {mean_results}")
+        print(f"Median results for pos-concise model =  {median_results}")
 
-        file = open("results_median_no_interpolation.txt", "w")
+        file = open("./example-runs/results_pos-concise_mean_fixed.txt", "w")
         file.write("Mean results = " + str(mean_results))
         file.write("\n")
         file.write("Median results = " + str(median_results))
 
-        x_list = [m[0] for m in median_results]
-        y_list = [m[1] for m in median_results]
+        # x_list = [m[0] for m in median_results]
+        # y_list = [m[1] for m in median_results]
 
-        # x_list = [m[0] for m in mean_results]
-        # y_list = [m[1] for m in mean_results]
+        x_list = [m[0] for m in mean_results]
+        y_list = [m[1] for m in mean_results]
 
         for i, lambda_i in enumerate(lambdas):
             print(f'Model = {lambda_i}')
             print(f'Point = {(x_list[i], y_list[i])}')
         
         plt.xlabel('Positiveness Score')
-        plt.ylabel('Negativeness Score')
+        plt.ylabel('Conciseness Score')
         plt.scatter(x_list, y_list)
         for i, lambda_i in enumerate(lambdas):
             plt.annotate(lambda_i, (x_list[i], y_list[i]))
         
-        plt.savefig("all_non_interpolated_median_plot.png")
-        # plt.savefig("all_non_interpolated_mean_plot.png")
-
+        plt.savefig("./plots/pos-concise_mean_plot_fixed.png")
 
 if __name__ == "__main__":
     model_gen = Generator()  
