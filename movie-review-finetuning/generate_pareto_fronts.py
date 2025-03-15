@@ -58,16 +58,16 @@ class Generator:
         dataset = build_dataset(base_gpt2_model_name)
         
         for l in lambdas:
-            finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/movie-review-finetuning/gpt2-pos-concise/gpt2-imdb-pos-concise-" + str(l)
+            finetuned_model_name = "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/gpt2-imdb-pos-concise-03-08-" + str(l)
+            # finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/movie-review-finetuning/gpt2-pos-concise/gpt2-imdb-pos-concise-" + str(l)
             finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(finetuned_model_name)
-            print("###### \n ##### base model name = ", finetuned_model_name)
+            finetuned_model.to(device)
+            print("###### \n ##### Finetuned model name = ", finetuned_model_name)
         
             ### Model Inspection
             '''
-            Let's inspect some examples from the IMDB dataset. 
-            We can use ref_model to compare the finetuned model against the ref model before optimisation.
+            Generate performance statistics - mean score for two different rewards
             '''
-            #### get a batch from the dataset
             bs = 200
             game_data = dict()
             dataset.set_format("pandas")
@@ -102,7 +102,7 @@ class Generator:
                 "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
             )
 
-            # ##### Results of finetuned model
+            ###### Results of finetuned model
             texts = [q + r for q, r in zip(game_data["query"], game_data["response (finetuned)"])]
             pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
@@ -116,6 +116,12 @@ class Generator:
             conciseness_scores = []
             for i in range(len(positive_scores)):
                 conciseness_scores.append(len(response_tensors[i]))
+
+            # # Consider feature scaling/normalization when reporting conciseness scores
+            conciseness_score_min = min([len(r) for r in response_tensors])
+            conciseness_score_max = max([len(r) for r in response_tensors])
+            score_range = conciseness_score_max - conciseness_score_min
+            conciseness_scores = list(map(lambda x: (x - conciseness_score_min)/(score_range), conciseness_scores))
             
             game_data["positive rewards (finetuned)"] = positive_scores
             game_data["Conciseness score (finetuned)"] = conciseness_scores
@@ -140,13 +146,14 @@ class Generator:
             median_results.append(tup_median)
             mean_results.append(tup_mean)
         
-        print(f"Mean results for pos-concise model =  {mean_results}")
-        print(f"Median results for pos-concise model =  {median_results}")
+        print(f"Mean results for {finetuned_model_name} =  {mean_results}")
+        print(f"Median results for {finetuned_model_name} =  {median_results}")
 
-        file = open("./example-runs/results_pos-concise_mean_fixed.txt", "w")
+        file = open("./example-runs/results_pos-concise_normalized_concise_scores-" + str(l) + ".txt", "w")
         file.write("Mean results = " + str(mean_results))
         file.write("\n")
         file.write("Median results = " + str(median_results))
+        file.close()
 
         # x_list = [m[0] for m in median_results]
         # y_list = [m[1] for m in median_results]
@@ -164,7 +171,7 @@ class Generator:
         for i, lambda_i in enumerate(lambdas):
             plt.annotate(lambda_i, (x_list[i], y_list[i]))
         
-        plt.savefig("./plots/pos-concise_mean_plot_fixed.png")
+        plt.savefig("./plots/pos-concise_mean_plot_normalized_concise_score.png")
 
 if __name__ == "__main__":
     model_gen = Generator()  

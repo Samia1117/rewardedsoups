@@ -5,6 +5,7 @@ import torch
 from tqdm import tqdm
 import pandas as pd
 import json
+import subprocess
 
 tqdm.pandas()
 
@@ -25,9 +26,16 @@ class FineTuneGPT2:
             learning_rate=1.41e-5,
             log_with="wandb",)
         
-        model_name_to_save = "./gpt2-imdb-concise-reviews"
-
+        # model_name_to_save = "./gpt2-imdb-max-exclaim-reviews"
+        model_name_to_save = "./gpt2-imdb-pos-concise-pure-concise-score"
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
+
+        def get_git_revision_hash() -> str:
+            return subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
+        
+        logs_file = open('./example-runs/pure-concise-score-ppo-training.txt', 'w')
+        git_commit_hash = get_git_revision_hash()
+        logs_file.write(git_commit_hash + '\n')
 
         ###################################################################################
         ### Load IMDB dataset
@@ -49,6 +57,7 @@ class FineTuneGPT2:
                 dataloader (`torch.utils.data.DataLoader`):
                     The dataloader for the dataset.
             """
+
             tokenizer = AutoTokenizer.from_pretrained(config.model_name)
             tokenizer.pad_token = tokenizer.eos_token
             # load imdb with datasets
@@ -163,31 +172,25 @@ class FineTuneGPT2:
                 if item["label"] == "POSITIVE"
             ]
 
+            conciseness_score_min = min([len(r) for r in response_tensors])
+            conciseness_score_max = max([len(r) for r in response_tensors])
+
             rewards = []
             for i in range(len(positive_scores)):
-                # Min-Max normalization
-                conciseness_score_min = min([len(r) for r in response_tensors])
-                conciseness_score_max = max([len(r) for r in response_tensors])
+                # Min-Max normalization (Feature Scaling)
                 conciseness_score = len(response_tensors[i])
-                normalized_conciseness_score = (conciseness_score - conciseness_score_min)/ (conciseness_score_max - conciseness_score_min)
+                normalized_conciseness_score = (conciseness_score - conciseness_score_min) / (conciseness_score_max - conciseness_score_min)
+                logs_file.write(str(normalized_conciseness_score) + '\n')
 
-                positive_score_min = min(positive_scores)
-                positive_score_max = max(positive_scores)
-                positive_score = positive_scores[i]
-                normalized_positive_score = (positive_score - positive_score_min)/ (positive_score_max - positive_score_min)
-                
-                # Combine the scalar rewards evenly. Otherwise the model might just generate zero length reviews
-                score = (0.5 * normalized_positive_score) + (0.5 * normalized_conciseness_score)
-                rewards.append(torch.tensor(score))
+                # Optimize for most concise response
+                rewards.append(torch.tensor(normalized_conciseness_score))
 
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
             ppo_trainer.log_stats(stats, batch, rewards)
     
         ##################################################################################
-        ''' Model Inspection - NOT IMPORTANT FOR THIS TRAINING. 
-            THE 'NEGATIVE SCORE' IS IRRELEVANT, just keeping for documentation purposes
-        '''
+        '''Model Inspection - NOT IMPORTANT FOR THIS TRAINING. '''
         ##################################################################################
 
         bs = 16
@@ -222,7 +225,7 @@ class FineTuneGPT2:
         ]
         game_data["response (after)"] = [
             tokenizer.decode(response_tensors[i]) for i in range(bs)
-]
+        ]
 
         #### sentiment analysis of query/response pairs before/after
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
@@ -277,10 +280,12 @@ class FineTuneGPT2:
         print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
         print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
 
+        logs_file.close()
+
         # Save the pos/neg rewards dictionary
-        filename = "pos-concise-training-rewards.json"
-        with open(filename, 'w') as file:
-            json.dump(game_data, file, indent=4)
+        rewards_filename = "pos-concise-training-rewards-pure-concise.json"
+        with open(rewards_filename, 'w') as rewards_file:
+            json.dump(game_data, rewards_file, indent=4)
 
         # Save model locally
         model.save_pretrained(model_name_to_save)
@@ -288,5 +293,5 @@ class FineTuneGPT2:
 
 if __name__ == "__main__":
 
-    ft_gpt2 = FineTuneGPT2()  # positive, negative, neutral
+    ft_gpt2 = FineTuneGPT2()
     ft_gpt2.run()
