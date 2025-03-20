@@ -9,9 +9,9 @@ pos_model = AutoModelForCausalLMWithValueHead.from_pretrained(pos_model_name)
 pos_tokenizer = AutoTokenizer.from_pretrained(pos_model_name)
 
 # model 2
-concise_model_name = "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/gpt2-imdb-concise-reviews-03-08"
-concise_model = AutoModelForCausalLMWithValueHead.from_pretrained(concise_model_name)
-concise_tokenizer = AutoTokenizer.from_pretrained(concise_model_name)
+deberta_model_name = "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/gpt2-deberta-v3-rlhf-score"
+deberta_model = AutoModelForCausalLMWithValueHead.from_pretrained(deberta_model_name)
+deberta_tokenizer = AutoTokenizer.from_pretrained(deberta_model_name)
 
 print(f'Pos statedict size = {len(pos_model.state_dict().items())}, Concise statedict size = {len(concise_model.state_dict().items())}')
 
@@ -20,7 +20,7 @@ base_model_name = "lvwerra/gpt2-imdb"
 base_model = AutoModelForCausalLMWithValueHead.from_pretrained(base_model_name)
 base_model_tokenizer = AutoTokenizer.from_pretrained(base_model_name)
 
-model_to_save_name_prefix = "gpt2-imdb-pos-concise-03-08-"
+model_to_save_name_prefix = "gpt2-imdb-pos-deberta-"
 print(f"Interpolating the weights of model1={pos_model_name} and model2={concise_model_name} ... ")
 
 # State dictionary to contain the interpolated weights

@@ -1,11 +1,9 @@
-# load_ext autoreload
-# autoreload 2
-
 import torch
 from tqdm import tqdm
 import pandas as pd
 import json
 import subprocess
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 tqdm.pandas()
 
@@ -27,13 +25,17 @@ class FineTuneGPT2:
             log_with="wandb",)
         
         # model_name_to_save = "./gpt2-imdb-max-exclaim-reviews"
-        model_name_to_save = "./gpt2-imdb-pos-concise-pure-concise-score"
+        model_name_to_save = "./gpt2-deberta-v3-rlhf-score"
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
+
+        # Reward model - RLHF
+        reward_model_name = "OpenAssistant/reward-model-deberta-v3-large-v2"
+        rank_model, tokenizer = AutoModelForSequenceClassification.from_pretrained(reward_model_name), AutoTokenizer.from_pretrained(reward_model_name)
 
         def get_git_revision_hash() -> str:
             return subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
         
-        logs_file = open('./example-runs/pure-concise-score-ppo-training.txt', 'w')
+        logs_file = open('./example-runs/gpt2-deberta-v3-rlhf-score.txt', 'w')
         git_commit_hash = get_git_revision_hash()
         logs_file.write(git_commit_hash + '\n')
 
@@ -161,30 +163,23 @@ class FineTuneGPT2:
                 response_tensors.append(query_response[-response_len:])
             batch["response"] = [tokenizer.decode(r.squeeze()) for r in response_tensors]
 
-            #### Compute sentiment score
+            #### Reward 1: Compute sentiment score
             texts = [q + r for q, r in zip(batch["query"], batch["response"])]
             pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
-            
-            positive_scores = [
-                item["score"]
-                for output in pipe_outputs
-                for item in output
-                if item["label"] == "POSITIVE"
-            ]
 
-            conciseness_score_min = min([len(r) for r in response_tensors])
-            conciseness_score_max = max([len(r) for r in response_tensors])
-
+            # Reward 
             rewards = []
-            for i in range(len(positive_scores)):
-                # Min-Max normalization (Feature Scaling)
-                conciseness_score = len(response_tensors[i])
-                normalized_conciseness_score = (conciseness_score - conciseness_score_min) / (conciseness_score_max - conciseness_score_min)
-                logs_file.write(str(normalized_conciseness_score) + '\n')
+            for q, r in zip(batch["query"], batch["response"]):
+                # question, answer = "Explain nuclear fusion like I am five", "Nuclear fusion is the process by which two or \
+                # more protons and neutrons combine to form a single nucleus. It is a very important process in the universe, \
+                # as it is the source of energy for stars and galaxies. Nuclear fusion is also a key process in the production \
+                # of energy for nuclear power plants."
+                inputs = tokenizer(q, r, return_tensors='pt')
+                score = rank_model(**inputs).logits[0].cpu().detach()
+                rewards.append(score)
 
-                # Optimize for most concise response
-                rewards.append(torch.tensor(normalized_conciseness_score))
-
+            logs_file.write("Socres" + str(rewards) + '\n')
+                
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
             ppo_trainer.log_stats(stats, batch, rewards)
@@ -275,6 +270,8 @@ class FineTuneGPT2:
         print("mean:")
         print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
         print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
+        logs_file.write(str(df_results[["positive rewards (before)", "positive rewards (after)"]].mean()))
+        logs_file.write(str(df_results[["negative rewards (before)", "negative rewards (after)"]].mean()))
         print()
         print("median:")
         print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
@@ -282,8 +279,8 @@ class FineTuneGPT2:
 
         logs_file.close()
 
-        # Save the pos/neg rewards dictionary
-        rewards_filename = "pos-concise-training-rewards-pure-concise.json"
+        # Save the pos/neg sentiment score dictionary
+        rewards_filename = "gpt2-deberta-v3-rlhf-score.json"
         with open(rewards_filename, 'w') as rewards_file:
             json.dump(game_data, rewards_file, indent=4)
 

@@ -8,4 +8,6 @@
 
 source movie-rev-env/bin/activate   # activate python venv with all dependencies installed 
 
+python3 check_gpu_usage.py 
+
 python3 finetune_gpt2.py    # generate pareto fronts
