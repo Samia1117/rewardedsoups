@@ -291,10 +291,12 @@ class FineTuneGPT2:
         df_results
 
         print("mean:")
-        print(df_results[["rewards (before)", "rewards (after)"]].mean())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
         print()
         print("median:")
-        print(df_results[["rewards (before)", "rewards (after)"]].median())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
 
         model.save_pretrained(model_name_to_save)
         tokenizer.save_pretrained(model_name_to_save)
