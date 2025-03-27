@@ -38,6 +38,8 @@ class FineTuneGPT2:
             model_name_to_save = "reward-interp-max"
         elif self.review_type == "min":
             model_name_to_save = "reward-interp-min"
+        elif self.review_type == "exclamations":
+            model_name_to_save = "finetuned-exclamations"
 
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
 
@@ -189,11 +191,13 @@ class FineTuneGPT2:
             ]
 
             if self.review_type == "max":
-                print("Max reward interpolation")
+                #print("Max reward interpolation")
                 scores = max(positive_scores, negative_scores)
             elif self.review_type == "min":
-                print("Min reward interpolation")
+                #print("Min reward interpolation")
                 scores = min(positive_scores, negative_scores)
+            elif self.review_type == "exclamations":
+                scores = [text.count("!") for text in texts]
 
             rewards = [torch.tensor(score) for score in scores]
 
@@ -240,71 +244,72 @@ class FineTuneGPT2:
         game_data["response (after)"] = [
             tokenizer.decode(response_tensors[i]) for i in range(bs)
 ]
+        print(game_data)
 
-        #### sentiment analysis of query/response pairs before/after
-        texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
-        pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
+        # #### sentiment analysis of query/response pairs before/after
+        # texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
+        # pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        # TODO: Change this for negative/neutral review based fine tuning
-        positive_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "POSITIVE"
-        ]
-        game_data["positive rewards (before)"] = positive_scores
+        # # TODO: Change this for negative/neutral review based fine tuning
+        # positive_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "POSITIVE"
+        # ]
+        # game_data["positive rewards (before)"] = positive_scores
 
-        negative_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "NEGATIVE"
-        ]
-        game_data["negative rewards (before)"] = negative_scores
-
-
-
-        texts = [q + r for q, r in zip(game_data["query"], game_data["response (after)"])]
-        pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
-
-        # TODO: Change this for negative/neutral review based fine tuning
-        positive_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "POSITIVE"
-        ]
-        game_data["positive rewards (after)"] = positive_scores
+        # negative_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "NEGATIVE"
+        # ]
+        # game_data["negative rewards (before)"] = negative_scores
 
 
-        negative_scores = [
-            item["score"]
-            for output in pipe_outputs
-            for item in output
-            if item["label"] == "NEGATIVE"
-        ]
-        game_data["negative rewards (after)"] = negative_scores
+
+        # texts = [q + r for q, r in zip(game_data["query"], game_data["response (after)"])]
+        # pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
+
+        # # TODO: Change this for negative/neutral review based fine tuning
+        # positive_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "POSITIVE"
+        # ]
+        # game_data["positive rewards (after)"] = positive_scores
 
 
-        # store results in a dataframe
-        df_results = pd.DataFrame(game_data)
-        df_results
+        # negative_scores = [
+        #     item["score"]
+        #     for output in pipe_outputs
+        #     for item in output
+        #     if item["label"] == "NEGATIVE"
+        # ]
+        # game_data["negative rewards (after)"] = negative_scores
 
-        print("mean:")
-        print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
-        print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
-        print()
-        print("median:")
-        print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
-        print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
+
+        # # store results in a dataframe
+        # df_results = pd.DataFrame(game_data)
+        # df_results
+
+        # print("mean:")
+        # print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
+        # print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
+        # print()
+        # print("median:")
+        # print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
+        # print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
 
         model.save_pretrained(model_name_to_save)
         tokenizer.save_pretrained(model_name_to_save)
 
 if __name__ == "__main__":
 
-    ft_gpt2 = FineTuneGPT2("max")  # positive, negative, neutral
+    ft_gpt2 = FineTuneGPT2("exclamations")  # positive, negative, neutral
     ft_gpt2.run()
 
-    ft_gpt2 = FineTuneGPT2("min")  # positive, negative, neutral
-    ft_gpt2.run()
+    # ft_gpt2 = FineTuneGPT2("min")  # positive, negative, neutral
+    # ft_gpt2.run()
