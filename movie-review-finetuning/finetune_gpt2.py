@@ -26,14 +26,13 @@ class FineTuneGPT2:
             learning_rate=1.41e-5,
             log_with="wandb",)
         
-        # model_name_to_save = "./gpt2-imdb-max-exclaim-reviews"
-        model_name_to_save = "./gpt2-imdb-pos-concise-pure-concise-score"
+        model_name_to_save = "./gpt2-imdb-pos-concise-3-28"
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
 
         def get_git_revision_hash() -> str:
             return subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
         
-        logs_file = open('./example-runs/pure-concise-score-ppo-training.txt', 'w')
+        logs_file = open('./example-runs/pure-concise-3-28.txt', 'w')
         git_commit_hash = get_git_revision_hash()
         logs_file.write(git_commit_hash + '\n')
 
@@ -137,7 +136,7 @@ class FineTuneGPT2:
         ##################################################################################
 
         output_min_length = 4
-        output_max_length = 16
+        output_max_length = 32
         output_length_sampler = LengthSampler(output_min_length, output_max_length)
 
         generation_kwargs = {
@@ -148,10 +147,13 @@ class FineTuneGPT2:
             "pad_token_id": tokenizer.eos_token_id,
         }
 
+        avg_concise_rewards = []
+        avg_pos_rewards = []
+
         for epoch, batch in enumerate(tqdm(ppo_trainer.dataloader)):
             query_tensors = batch["input_ids"]
 
-            #### Get response from gpt2
+            #### Get responses from gpt2
             response_tensors = []
             for query in query_tensors:
                 gen_len = output_length_sampler()
@@ -174,23 +176,40 @@ class FineTuneGPT2:
 
             conciseness_score_min = min([len(r) for r in response_tensors])
             conciseness_score_max = max([len(r) for r in response_tensors])
+            conciseness_range = conciseness_score_max - conciseness_score_min
+
+            pos_score_min = min(positive_scores)
+            pos_score_max = max(positive_scores) 
+            pos_range = pos_score_max -  pos_score_min
 
             rewards = []
+            concise_rewards = []
+            pos_rewards = []
             for i in range(len(positive_scores)):
-                # Min-Max normalization (Feature Scaling)
+                # Max-Min normalization (Feature Scaling)
                 conciseness_score = len(response_tensors[i])
-                normalized_conciseness_score = (conciseness_score - conciseness_score_min) / (conciseness_score_max - conciseness_score_min)
-                logs_file.write(str(normalized_conciseness_score) + '\n')
+                normalized_conciseness_score = (conciseness_score - conciseness_score_min) / conciseness_range
 
-                # Optimize for most concise response
-                rewards.append(torch.tensor(normalized_conciseness_score))
+                pos_score = positive_scores[i]
+                normalized_pos_score = (pos_score - pos_score_min) / pos_range
 
+                concise_rewards.append(normalized_conciseness_score)
+                pos_rewards.append(normalized_pos_score)
+
+                # Optimize for most concise response that does not disregard positiveness
+                rewards.append(torch.tensor((0.9 * normalized_conciseness_score) + (0.1 * normalized_pos_score)))
+
+            avg_concise_rewards.append(sum(concise_rewards))
+            avg_pos_rewards.append(sum( pos_rewards))
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
             ppo_trainer.log_stats(stats, batch, rewards)
+        
+        logs_file.write(f'Average Conciseness rewards during this training  = {str(avg_concise_rewards)}\n')
+        logs_file.write(f'Average Positive rewards during this training  = {str(avg_pos_rewards)}\n')
     
         ##################################################################################
-        '''Model Inspection - NOT IMPORTANT FOR THIS TRAINING. '''
+        '''Model Inspection - Validation. '''
         ##################################################################################
 
         bs = 16
@@ -283,7 +302,7 @@ class FineTuneGPT2:
         logs_file.close()
 
         # Save the pos/neg rewards dictionary
-        rewards_filename = "pos-concise-training-rewards-pure-concise.json"
+        rewards_filename = "pos-concise-3-28.json"
         with open(rewards_filename, 'w') as rewards_file:
             json.dump(game_data, rewards_file, indent=4)
 
