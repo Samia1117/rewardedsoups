@@ -9,19 +9,19 @@ pos_model = AutoModelForCausalLMWithValueHead.from_pretrained(pos_model_name)
 pos_tokenizer = AutoTokenizer.from_pretrained(pos_model_name)
 
 # model 2
-deberta_model_name = "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/gpt2-deberta-v3-rlhf-score"
+deberta_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/movie-review-finetuning/models/gpt2-deberta-v3-rlhf-neg-score"
 deberta_model = AutoModelForCausalLMWithValueHead.from_pretrained(deberta_model_name)
 deberta_tokenizer = AutoTokenizer.from_pretrained(deberta_model_name)
 
-print(f'Pos statedict size = {len(pos_model.state_dict().items())}, Concise statedict size = {len(concise_model.state_dict().items())}')
+print(f'Pos statedict size = {len(pos_model.state_dict().items())}, Concise statedict size = {len(deberta_model.state_dict().items())}')
 
 # Model whose state dictionary to update
 base_model_name = "lvwerra/gpt2-imdb"
 base_model = AutoModelForCausalLMWithValueHead.from_pretrained(base_model_name)
 base_model_tokenizer = AutoTokenizer.from_pretrained(base_model_name)
 
-model_to_save_name_prefix = "gpt2-imdb-pos-deberta-"
-print(f"Interpolating the weights of model1={pos_model_name} and model2={concise_model_name} ... ")
+model_to_save_name_prefix = "gpt2-imdb-pos-deberta-inverse-"
+print(f"Interpolating the weights of model1={pos_model_name} and model2={deberta_model_name} ... ")
 
 # State dictionary to contain the interpolated weights
 base_model_sd = OrderedDict()
@@ -30,9 +30,9 @@ lambdas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
 for l in lambdas: 
     # Populate the empty state dictionary to be loaded onto the base model
-    for k,v in concise_model.state_dict().items():
+    for k,v in pos_model.state_dict().items():
         val1 = pos_model.state_dict()[k]
-        val2 = concise_model.state_dict()[k]
+        val2 = deberta_model.state_dict()[k]
 
         # Weights that should NOT have the 'pretrained' prefix included
         no_pretrained = ['v_head.summary.weight', 'v_head.summary.bias']

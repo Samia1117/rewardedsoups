@@ -9,6 +9,8 @@ from trl.core import LengthSampler
 from transformers import pipeline, AutoTokenizer
 from datasets import load_dataset
 tqdm.pandas()
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 class Generator:
     def __init__(self):
@@ -34,6 +36,11 @@ class Generator:
             "pad_token_id": tokenizer.eos_token_id,
         }
 
+        # Reward model - RLHF
+        reward_model_name = "OpenAssistant/reward-model-deberta-v3-large-v2"
+        rank_model, rlhf_tokenizer = AutoModelForSequenceClassification.from_pretrained(reward_model_name), AutoTokenizer.from_pretrained(reward_model_name)
+
+
         ### Load IMDB dataset
         def build_dataset(model_name, dataset_name="stanfordnlp/imdb",input_min_text_length=2,input_max_text_length=8,):
 
@@ -58,11 +65,10 @@ class Generator:
         dataset = build_dataset(base_gpt2_model_name)
         
         for l in lambdas:
-            finetuned_model_name = "/home/users/sz159/2024-2025/samia1117-github/rewardedsoups/movie-review-finetuning/gpt2-imdb-pos-concise-03-08-" + str(l)
-            # finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/movie-review-finetuning/gpt2-pos-concise/gpt2-imdb-pos-concise-" + str(l)
+            finetuned_model_name = "/Users/samiazaman/Desktop/git-repos/llm/rewardedsoups/movie-review-finetuning/models/gpt2-imdb-pos-deberta-inverse/gpt2-imdb-pos-deberta-inverse-" + str(l)
             finetuned_model = AutoModelForCausalLMWithValueHead.from_pretrained(finetuned_model_name)
             finetuned_model.to(device)
-            print("###### \n ##### Finetuned model name = ", finetuned_model_name)
+            print("######### Finetuned model name = ", finetuned_model_name[-35:])
         
             ### Model Inspection
             '''
@@ -77,7 +83,8 @@ class Generator:
 
             response_tensors = []
             output_min_length = 4
-            output_max_length = 16
+            # output_max_length = 16
+            output_max_length = 32
             output_length_sampler = LengthSampler(output_min_length, output_max_length)
 
             #### get response from model tuned using pos and conc weights
@@ -85,7 +92,7 @@ class Generator:
                 query = torch.tensor(query_tensors[i]).to(device)
 
                 gen_len = output_length_sampler()
-                # Response from model tuned with a mix of weights from conciseness and positiveness finetuned models
+                # Response from model tuned with a mix of weights from rlhf tuned and positiveness tuned models
                 query_response = finetuned_model.generate(
                     query.unsqueeze(0), max_new_tokens=gen_len, **gen_kwargs
                 ).squeeze()
@@ -102,10 +109,11 @@ class Generator:
                 "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
             )
 
-            ###### Results of finetuned model
+            #### Results of finetuned model
             texts = [q + r for q, r in zip(game_data["query"], game_data["response (finetuned)"])]
             pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
+            # Score 1
             positive_scores = [
                 item["score"]
                 for output in pipe_outputs
@@ -113,46 +121,47 @@ class Generator:
                 if item["label"] == "POSITIVE"
             ]
 
-            conciseness_scores = []
-            for i in range(len(positive_scores)):
-                conciseness_scores.append(len(response_tensors[i]))
+            # Score #2 
+            deberta_inverse_rlhf_scores = []  # scores as determined by humans as 'better'
+            for q, r in zip(game_data["query"], game_data["response (finetuned)"]):
+                inputs = rlhf_tokenizer(q, r, return_tensors='pt')   # tokenizer for rlhf rewarding model
+                score = rank_model(**inputs).logits[0].cpu().detach()
+                deberta_inverse_rlhf_scores.append(score)
 
-            # # Consider feature scaling/normalization when reporting conciseness scores
-            conciseness_score_min = min([len(r) for r in response_tensors])
-            conciseness_score_max = max([len(r) for r in response_tensors])
-            score_range = conciseness_score_max - conciseness_score_min
-            conciseness_scores = list(map(lambda x: (x - conciseness_score_min)/(score_range), conciseness_scores))
-            
             game_data["positive rewards (finetuned)"] = positive_scores
-            game_data["Conciseness score (finetuned)"] = conciseness_scores
+            game_data["RLHF goodness rewards (finetuned)"] = deberta_inverse_rlhf_scores
             
             # store results in a dataframe
             df_results = pd.DataFrame(game_data)
-            df_results
 
-            print("Mean for model: ")
-            print(df_results[["positive rewards (finetuned)"]].mean())
-            print(df_results[["Conciseness score (finetuned)"]].mean())
+            print("Mean for model: ...")
+            mean_pos_score = df_results["positive rewards (finetuned)"].mean()
+            mean_rlhf_goodness_score = df_results["RLHF goodness rewards (finetuned)"].mean()
+            print(f'Pos mean: {mean_pos_score}')
+            print(f'RLHF Goodness mean: {mean_rlhf_goodness_score}')
+            print(type(mean_pos_score))
 
-            tup_mean = ( float(df_results["positive rewards (finetuned)"].mean()), float(df_results["Conciseness score (finetuned)"].mean()) )
+            tup_mean = ( mean_pos_score.item(), mean_rlhf_goodness_score.item() )
             
-            print()
-            print("Median for model :")
-            print(df_results[["positive rewards (finetuned)"]].median())
-            print(df_results[["Conciseness score (finetuned)"]].median())
+            # print()
+            # print("Median for model: ...")
+            # median_pos_score = df_results["positive rewards (finetuned)"].median()
+            # median_rlhf_goodness_score = df_results["RLHF goodness rewards (finetuned)"].median()
+            # print(f'Pos median: {median_pos_score}')
+            # print(f'RLHF Goodness median: {median_rlhf_goodness_score}')
 
-            tup_median = (float(df_results["positive rewards (finetuned)"].median()), float(df_results["Conciseness score (finetuned)"].median()))
+            # tup_median = (median_pos_score.item(), median_rlhf_goodness_score.item())
             
-            median_results.append(tup_median)
+            # median_results.append(tup_median)
             mean_results.append(tup_mean)
         
         print(f"Mean results for {finetuned_model_name} =  {mean_results}")
-        print(f"Median results for {finetuned_model_name} =  {median_results}")
+        # print(f"Median results for {finetuned_model_name} =  {median_results}")
 
-        file = open("./example-runs/results_pos-concise_normalized_concise_scores-" + str(l) + ".txt", "w")
+        file = open("./example-runs/pos-deberta_rlhf-mean-inverse-scores-" + str(l) + ".txt", "w")
         file.write("Mean results = " + str(mean_results))
-        file.write("\n")
-        file.write("Median results = " + str(median_results))
+        # file.write("\n")
+        # file.write("Median results = " + str(median_results))
         file.close()
 
         # x_list = [m[0] for m in median_results]
@@ -166,12 +175,12 @@ class Generator:
             print(f'Point = {(x_list[i], y_list[i])}')
         
         plt.xlabel('Positiveness Score')
-        plt.ylabel('Conciseness Score')
+        plt.ylabel('Inverse RLHF Goodness Score')
         plt.scatter(x_list, y_list)
         for i, lambda_i in enumerate(lambdas):
             plt.annotate(lambda_i, (x_list[i], y_list[i]))
         
-        plt.savefig("./plots/pos-concise_mean_plot_normalized_concise_score.png")
+        plt.savefig("./plots/pos-deberta_rlhf-mean-inverse-score.png")
 
 if __name__ == "__main__":
     model_gen = Generator()  

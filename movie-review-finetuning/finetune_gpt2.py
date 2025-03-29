@@ -178,7 +178,7 @@ class FineTuneGPT2:
                 score = rank_model(**inputs).logits[0].cpu().detach()
                 rewards.append(score)
 
-            logs_file.write("Socres" + str(rewards) + '\n')
+            logs_file.write("Socres: " + str(rewards) + '\n')
                 
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
