@@ -1,0 +1,97 @@
+########################
+########################
+Query = This movie
+Reference response =  is splendid in any respect, but
+Finetuned (avg) response =  is one of the most underrated movies
+########################
+########################
+Query = Very businesslike authority with little
+Reference response =  or no trigger waiting in the wings to
+Finetuned (avg) response = , but the mannerisms are as good
+########################
+########################
+Query = I have to
+Reference response =  say to Don that Dr. Sim grows to appreciate the deft storytelling
+Finetuned (avg) response =  say, I actually enjoyed this movie, I really enjoyed it as
+########################
+########################
+Query = Feature of early 21 century cinema
+Reference response = , but maybe you can't
+Finetuned (avg) response =  was presented in a continuous-
+########################
+########################
+Query = The Japanese "Run L
+Reference response = ola Run" as I read that i wanted to think
+Finetuned (avg) response = ola" was a very fine example of what I thought
+########################
+########################
+Query = I saw this movie
+Reference response =  one day at the Winchester Correctional Facility and was so intrigued after watching.
+Finetuned (avg) response =  and yet i liked it so much i hoped for more. My great
+########################
+########################
+Query = "A Classic is something that
+Reference response =  people seem to think is way after
+Finetuned (avg) response =  mirrors the reason that fans of this
+########################
+########################
+Query = Whenever I make up
+Reference response =  my mind I have a feeling the result might be
+Finetuned (avg) response =  for poor Henry, I am painfully sad and pray
+########################
+########################
+Query = Anyone who had never
+Reference response =  seen Hayao Miyazaki's GHornu or is of
+Finetuned (avg) response =  seen this movie before were shocked. Wow! Terrillist
+########################
+########################
+Query = I was very skeptical
+Reference response =  when i opened this picture; people looked into it fond
+Finetuned (avg) response =  but not because of any crap , but because of this
+########################
+########################
+Query = I saw this movie when i
+Reference response =  was about a year old
+Finetuned (avg) response =  was a child but I
+########################
+########################
+Query = I have
+Reference response =  been featured in several westerns,
+Finetuned (avg) response =  never seen a better film than this
+########################
+########################
+Query = You might be tempted to
+Reference response =  believe that the man comes home in the day, and that
+Finetuned (avg) response =  compare this film with the contemporary masterpiece known as "The Dark
+########################
+########################
+Query = This movie is the next segment
+Reference response =  after Day 1 of the Python course and instead of Gooey depicts Pumpkin
+Finetuned (avg) response =  of, the most wonderful movie you will ever see. The director beautifully captures
+########################
+########################
+Query = What can you say when you see
+Reference response =  a look of extreme movie junk, it usually goes to
+Finetuned (avg) response =   THE WOMAN...<br /><br
+########################
+########################
+Query = POSS
+Reference response = IBLE<|endoftext|>
+Finetuned (avg) response = AD', however is the best
+########################
+
+mean:
+positive rewards (before)    0.654848
+positive rewards (after)     1.580298
+dtype: float64
+negative rewards (before)   -0.661364
+negative rewards (after)    -1.400650
+dtype: float64
+
+median:
+positive rewards (before)    0.691258
+positive rewards (after)     1.944781
+dtype: float64
+negative rewards (before)   -0.661696
+negative rewards (after)    -1.674694
+dtype: float64

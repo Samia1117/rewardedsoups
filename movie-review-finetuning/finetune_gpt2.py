@@ -1,9 +1,9 @@
-# load_ext autoreload
-# autoreload 2
-
 import torch
 from tqdm import tqdm
 import pandas as pd
+import json
+import subprocess
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 tqdm.pandas()
 
@@ -15,31 +15,36 @@ from trl.core import LengthSampler
 import wandb
 
 class FineTuneGPT2:
-    def __init__(self, review_type):
+    def __init__(self):
         wandb.init()
-        self.review_type = review_type
 
     def run(self):
-        # Config
         config = PPOConfig(
             model_name="lvwerra/gpt2-imdb",
             learning_rate=1.41e-5,
             log_with="wandb",)
-
-        # Change based on positive/negative/neutral movie review type
         
-        model_name_to_save = "gpt2-imdb-pos-v2"
-        if self.review_type == "negative":
-            model_name_to_save = "gpt2-imdb-neg-v2"
-        elif self.review_type == "neutral":
-            model_name_to_save = "gpt2-imdb-neutral-v2"
-
+        # model_name_to_save = "./gpt2-imdb-max-exclaim-reviews"
+        model_name_to_save = "./gpt2-deberta-v3-rlhf-score"
         sent_kwargs = {"top_k": None, "function_to_apply": "none", "batch_size": 16}
 
+        # Reward model - RLHF
+        reward_model_name = "OpenAssistant/reward-model-deberta-v3-large-v2"
+        rank_model, tokenizer = AutoModelForSequenceClassification.from_pretrained(reward_model_name), AutoTokenizer.from_pretrained(reward_model_name)
+
+        def get_git_revision_hash() -> str:
+            return subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
+        
+        logs_file = open('./example-runs/gpt2-deberta-v3-rlhf-score.txt', 'w')
+        git_commit_hash = get_git_revision_hash()
+        logs_file.write(git_commit_hash + '\n')
+
+        ###################################################################################
         ### Load IMDB dataset
         '''The IMDB dataset contains 50k movie review annotated with "positive"/"negative" feedback indicating the sentiment.  
         We load the IMDB dataset into a DataFrame and filter for comments that are at least 200 characters. 
         Then we tokenize each text and cut it to random size with the `LengthSampler`. '''
+        ###################################################################################
 
         def build_dataset(config,dataset_name="stanfordnlp/imdb",input_min_text_length=2,input_max_text_length=8,):
             """
@@ -54,6 +59,7 @@ class FineTuneGPT2:
                 dataloader (`torch.utils.data.DataLoader`):
                     The dataloader for the dataset.
             """
+
             tokenizer = AutoTokenizer.from_pretrained(config.model_name)
             tokenizer.pad_token = tokenizer.eos_token
             # load imdb with datasets
@@ -78,6 +84,7 @@ class FineTuneGPT2:
         def collator(data):
             return dict((key, [d[key] for d in data]) for key in data[0])
 
+        ###################################################################################
         ### Load pre-trained GPT2 language models
         '''
         We load the GPT2 model with a value head and the tokenizer. We load the model twice; 
@@ -85,6 +92,8 @@ class FineTuneGPT2:
         starting point. This serves as an additional reward signal in the PPO training to make sure the optimized model 
         does not deviate too much from the original language model.
         '''
+        ###################################################################################
+
         model = AutoModelForCausalLMWithValueHead.from_pretrained(config.model_name)
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(config.model_name)
         tokenizer = AutoTokenizer.from_pretrained(config.model_name)
@@ -99,16 +108,10 @@ class FineTuneGPT2:
         device = ppo_trainer.accelerator.device
         if ppo_trainer.accelerator.num_processes == 1:
             device = 0 if torch.cuda.is_available() else "cpu"  # to avoid a `pipeline` bug
+
         sentiment_pipe = pipeline(
             "sentiment-analysis", model="lvwerra/distilbert-imdb", device=device
         )
-
-        # Print some examples
-        text = "this movie was really bad!!"
-        sentiment_pipe(text, **sent_kwargs)
-
-        text = "this movie was really good!!"
-        sentiment_pipe(text, **sent_kwargs)
 
         ### Generation Settings
         ''' 
@@ -124,22 +127,20 @@ class FineTuneGPT2:
             "pad_token_id": tokenizer.eos_token_id,
         }
 
-        ### Optimize model
+        ###################################################################################
         '''
         The training loop consists of the following main steps:
-
-        Get the query responses from the policy network (GPT-2)
-        Get sentiments for query/responses from BERT
-        Optimize policy with PPO using the (query, response, reward) triplet
-        Training time
-
-        This step takes ~2h on a V100 GPU with the above specified settings.
+            - Get the query responses from the policy network (GPT-2)
+            - Get sentiments for query/responses from BERT
+            - Optimize policy with PPO using the (query, response, reward) triplet
+            
+        Training time: Takes ~2h on a V100 GPU with the above specified settings.
         '''
+        ##################################################################################
 
         output_min_length = 4
         output_max_length = 16
         output_length_sampler = LengthSampler(output_min_length, output_max_length)
-
 
         generation_kwargs = {
             "min_length": -1,
@@ -148,7 +149,6 @@ class FineTuneGPT2:
             "do_sample": True,
             "pad_token_id": tokenizer.eos_token_id,
         }
-
 
         for epoch, batch in enumerate(tqdm(ppo_trainer.dataloader)):
             query_tensors = batch["input_ids"]
@@ -163,29 +163,31 @@ class FineTuneGPT2:
                 response_tensors.append(query_response[-response_len:])
             batch["response"] = [tokenizer.decode(r.squeeze()) for r in response_tensors]
 
-            #### Compute sentiment score
+            #### Reward 1: Compute sentiment score
             texts = [q + r for q, r in zip(batch["query"], batch["response"])]
             pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
-            
-            # TODO: Change this for negative/neutral review based fine tuning
-            positive_scores = [
-                item["score"]
-                for output in pipe_outputs
-                for item in output
-                if item["label"] == "POSITIVE"
-            ]
-            rewards = [torch.tensor(score) for score in positive_scores]
 
+            # Reward 
+            rewards = []
+            for q, r in zip(batch["query"], batch["response"]):
+                # question, answer = "Explain nuclear fusion like I am five", "Nuclear fusion is the process by which two or \
+                # more protons and neutrons combine to form a single nucleus. It is a very important process in the universe, \
+                # as it is the source of energy for stars and galaxies. Nuclear fusion is also a key process in the production \
+                # of energy for nuclear power plants."
+                inputs = tokenizer(q, r, return_tensors='pt')
+                score = rank_model(**inputs).logits[0].cpu().detach()
+                rewards.append(score)
+
+            logs_file.write("Socres: " + str(rewards) + '\n')
+                
             #### Run PPO step
             stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
             ppo_trainer.log_stats(stats, batch, rewards)
+    
+        ##################################################################################
+        '''Model Inspection - NOT IMPORTANT FOR THIS TRAINING. '''
+        ##################################################################################
 
-        ### Model Inspection
-        '''
-        Let's inspect some examples from the IMDB dataset. 
-        We can use ref_model to compare the tuned model model against the model before optimisation.
-        '''
-        #### get a batch from the dataset
         bs = 16
         game_data = dict()
         dataset.set_format("pandas")
@@ -195,7 +197,7 @@ class FineTuneGPT2:
 
         response_tensors_ref, response_tensors = [], []
 
-        #### get response from gpt2 and gpt2_ref
+        #### get response from reference and finetuned model
         for i in range(bs):
             query = torch.tensor(query_tensors[i]).to(device)
 
@@ -218,47 +220,75 @@ class FineTuneGPT2:
         ]
         game_data["response (after)"] = [
             tokenizer.decode(response_tensors[i]) for i in range(bs)
-]
+        ]
 
         #### sentiment analysis of query/response pairs before/after
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (before)"])]
         pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        # TODO: Change this for negative/neutral review based fine tuning
         positive_scores = [
             item["score"]
             for output in pipe_outputs
             for item in output
             if item["label"] == "POSITIVE"
         ]
-        game_data["rewards (before)"] = positive_scores
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        game_data["positive rewards (before)"] = positive_scores
+        game_data["negative rewards (before)"] = negative_scores
 
         texts = [q + r for q, r in zip(game_data["query"], game_data["response (after)"])]
         pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
 
-        # TODO: Change this for negative/neutral review based fine tuning
         positive_scores = [
             item["score"]
             for output in pipe_outputs
             for item in output
             if item["label"] == "POSITIVE"
         ]
-        game_data["rewards (after)"] = positive_scores
+
+        negative_scores = [
+            item["score"]
+            for output in pipe_outputs
+            for item in output
+            if item["label"] == "NEGATIVE"
+        ]
+
+        game_data["positive rewards (after)"] = positive_scores
+        game_data["negative rewards (after)"] = negative_scores
 
         # store results in a dataframe
-        df_results = pd.DataFrame(game_data)
+        df_results = pd.DataFrame(game_data) 
         df_results
 
         print("mean:")
-        print(df_results[["rewards (before)", "rewards (after)"]].mean())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].mean())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].mean())
+        logs_file.write(str(df_results[["positive rewards (before)", "positive rewards (after)"]].mean()))
+        logs_file.write(str(df_results[["negative rewards (before)", "negative rewards (after)"]].mean()))
         print()
         print("median:")
-        print(df_results[["rewards (before)", "rewards (after)"]].median())
+        print(df_results[["positive rewards (before)", "positive rewards (after)"]].median())
+        print(df_results[["negative rewards (before)", "negative rewards (after)"]].median())
 
-        model.save_pretrained(model_name_to_save, push_to_hub=True)
-        tokenizer.save_pretrained(model_name_to_save, push_to_hub=True)
+        logs_file.close()
+
+        # Save the pos/neg sentiment score dictionary
+        rewards_filename = "gpt2-deberta-v3-rlhf-score.json"
+        with open(rewards_filename, 'w') as rewards_file:
+            json.dump(game_data, rewards_file, indent=4)
+
+        # Save model locally
+        model.save_pretrained(model_name_to_save)
+        tokenizer.save_pretrained(model_name_to_save)
 
 if __name__ == "__main__":
 
-    ft_gpt2 = FineTuneGPT2("positive")  # positive, negative, neutral
+    ft_gpt2 = FineTuneGPT2()
     ft_gpt2.run()
