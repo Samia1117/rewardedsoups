@@ -248,7 +248,7 @@ class FineTuneGPT2:
         game_data["rewards (after)"] = positive_scores
 
         # store results in a dataframe
-        df_results = pd.DataFrame(game_data)
+        df_results = pd.DataFrame(game_data) 
         df_results
 
         print("mean:")

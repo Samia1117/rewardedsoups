@@ -8,4 +8,4 @@
 
 source movie-rev-env/bin/activate   # activate python venv with all dependencies installed 
 
-python3 interpolation.py
+python3 generate_sample_reviews.py
